@@ -7,8 +7,22 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
-import {createTrackerState} from './activityModel.js';
+import {
+    ActivityKind,
+    addTaskToList,
+    createTrackerState,
+    removeTaskFromList,
+    renameTaskInList,
+    startBreakSession,
+    startInterruptionSession,
+    switchActiveTask,
+    switchToNextTask,
+} from './activityModel.js';
 import {formatTopBarActivity} from './topBarViewModel.js';
+
+function createId(prefix) {
+    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 const FocusTaskIndicator = GObject.registerClass(
 class FocusTaskIndicator extends PanelMenu.Button {
@@ -22,12 +36,188 @@ class FocusTaskIndicator extends PanelMenu.Button {
         });
 
         this.add_child(this._label);
-        this.menu.addMenuItem(new PopupMenu.PopupMenuItem(_('No active task')));
+        this._rebuildMenu();
         this._updateLabel();
     }
 
     _updateLabel(now = new Date()) {
         this._label.set_text(formatTopBarActivity(this._trackerState, now));
+    }
+
+    _setTrackerState(nextState) {
+        this._trackerState = createTrackerState(nextState);
+        this._updateLabel();
+        this._rebuildMenu();
+    }
+
+    _applySessionSwitch(sessionSwitch) {
+        this._setTrackerState({
+            taskList: this._trackerState.taskList,
+            sessions: sessionSwitch.endedSession === null
+                ? this._trackerState.sessions
+                : [...this._trackerState.sessions, sessionSwitch.endedSession],
+            activeSession: sessionSwitch.activeSession,
+        });
+    }
+
+    _runMenuAction(action) {
+        try {
+            action();
+        } catch (error) {
+            logError(error, 'Focus Task menu action failed');
+        }
+    }
+
+    _addTaskFromEntry(entry) {
+        const taskName = entry.get_text();
+
+        if (taskName.trim() === '')
+            return;
+
+        this._setTrackerState({
+            taskList: addTaskToList(this._trackerState.taskList, {
+                id: createId('task'),
+                name: taskName,
+            }),
+            sessions: this._trackerState.sessions,
+            activeSession: this._trackerState.activeSession,
+        });
+    }
+
+    _renameTaskFromEntry(taskId, entry) {
+        const taskName = entry.get_text();
+
+        if (taskName.trim() === '')
+            return;
+
+        this._setTrackerState({
+            taskList: renameTaskInList(this._trackerState.taskList, taskId, taskName),
+            sessions: this._trackerState.sessions,
+            activeSession: this._trackerState.activeSession,
+        });
+    }
+
+    _removeTask(taskId) {
+        const activeSession = this._trackerState.activeSession?.activity?.id === taskId
+            ? null
+            : this._trackerState.activeSession;
+
+        this._setTrackerState({
+            taskList: removeTaskFromList(this._trackerState.taskList, taskId),
+            sessions: this._trackerState.sessions,
+            activeSession,
+        });
+    }
+
+    _switchToTask(taskId) {
+        this._applySessionSwitch(switchActiveTask(this._trackerState.taskList, this._trackerState.activeSession, {
+            sessionId: createId('session'),
+            taskId,
+            switchedAt: new Date().toISOString(),
+        }));
+    }
+
+    _switchToNextTask() {
+        this._applySessionSwitch(switchToNextTask(this._trackerState.taskList, this._trackerState.activeSession, {
+            sessionId: createId('session'),
+            switchedAt: new Date().toISOString(),
+        }));
+    }
+
+    _startBreak() {
+        this._applySessionSwitch(startBreakSession(this._trackerState.activeSession, {
+            sessionId: createId('session'),
+            breakId: createId('break'),
+            startedAt: new Date().toISOString(),
+        }));
+    }
+
+    _startInterruption() {
+        this._applySessionSwitch(startInterruptionSession(this._trackerState.activeSession, {
+            sessionId: createId('session'),
+            interruptionId: createId('interruption'),
+            startedAt: new Date().toISOString(),
+        }));
+    }
+
+    _createEntryControl({initialText = '', hintText, buttonText, onSubmit}) {
+        const item = new PopupMenu.PopupBaseMenuItem({activate: false});
+        const entry = new St.Entry({
+            text: initialText,
+            hint_text: hintText,
+            can_focus: true,
+            x_expand: true,
+        });
+        const button = new St.Button({
+            label: buttonText,
+            can_focus: true,
+            style_class: 'button',
+        });
+        const submit = () => this._runMenuAction(() => onSubmit(entry));
+
+        entry.clutter_text.connect('activate', submit);
+        button.connect('clicked', submit);
+        item.add_child(entry);
+        item.add_child(button);
+
+        return item;
+    }
+
+    _createActionItem(label, action, {sensitive = true} = {}) {
+        const item = new PopupMenu.PopupMenuItem(label);
+        item.setSensitive(sensitive);
+        item.connect('activate', () => this._runMenuAction(action));
+
+        return item;
+    }
+
+    _rebuildMenu() {
+        this.menu.removeAll();
+
+        this.menu.addMenuItem(this._createEntryControl({
+            hintText: _('Add Task...'),
+            buttonText: _('Add'),
+            onSubmit: entry => this._addTaskFromEntry(entry),
+        }));
+        this.menu.addMenuItem(this._createActionItem(
+            _('Switch to Next Task'),
+            () => this._switchToNextTask(),
+            {sensitive: this._trackerState.taskList.length > 0},
+        ));
+        this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+
+        const canPauseTask = this._trackerState.activeSession?.activity?.kind === ActivityKind.TASK;
+        this.menu.addMenuItem(this._createActionItem(
+            _('Start Break'),
+            () => this._startBreak(),
+            {sensitive: canPauseTask},
+        ));
+        this.menu.addMenuItem(this._createActionItem(
+            _('Start Interruption'),
+            () => this._startInterruption(),
+            {sensitive: canPauseTask},
+        ));
+        this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+
+        for (const task of this._trackerState.taskList) {
+            const taskMenu = new PopupMenu.PopupSubMenuMenuItem(task.name);
+            taskMenu.menu.addMenuItem(this._createActionItem(
+                _('Switch to'),
+                () => this._switchToTask(task.id),
+            ));
+            taskMenu.menu.addMenuItem(this._createEntryControl({
+                initialText: task.name,
+                hintText: _('Rename'),
+                buttonText: _('Rename'),
+                onSubmit: entry => this._renameTaskFromEntry(task.id, entry),
+            }));
+            taskMenu.menu.addMenuItem(this._createActionItem(
+                _('Remove'),
+                () => this._removeTask(task.id),
+            ));
+
+            this.menu.addMenuItem(taskMenu);
+        }
     }
 });
 

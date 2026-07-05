@@ -43,6 +43,36 @@ class ExtensionScaffoldTest(unittest.TestCase):
         self.assertIn("formatTopBarActivity(this._trackerState, now)", source)
         self.assertNotIn("Focus Task 0:00", source)
 
+    def test_extension_menu_exposes_task_controls(self):
+        source = EXTENSION_PATH.read_text(encoding="utf-8")
+
+        expected_imports = [
+            "addTaskToList",
+            "removeTaskFromList",
+            "renameTaskInList",
+            "switchToNextTask",
+            "startBreakSession",
+            "startInterruptionSession",
+        ]
+        for expected_import in expected_imports:
+            self.assertIn(expected_import, source)
+
+        expected_labels = [
+            "Add Task...",
+            "Switch to Next Task",
+            "Start Break",
+            "Start Interruption",
+            "Switch to",
+            "Rename",
+            "Remove",
+        ]
+        for label in expected_labels:
+            self.assertIn(f"_('{label}')", source)
+
+        self.assertIn("PopupMenu.PopupSubMenuMenuItem", source)
+        self.assertIn("PopupMenu.PopupSeparatorMenuItem", source)
+        self.assertNotIn("No active task", source)
+
     def test_extension_file_has_no_repository_specific_paths(self):
         source = EXTENSION_PATH.read_text(encoding="utf-8")
         metadata = METADATA_PATH.read_text(encoding="utf-8")
