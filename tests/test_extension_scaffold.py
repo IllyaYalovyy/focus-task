@@ -39,7 +39,7 @@ class ExtensionScaffoldTest(unittest.TestCase):
     def test_extension_formats_top_bar_label_from_tracker_state(self):
         source = EXTENSION_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("import {formatTopBarActivity} from './topBarViewModel.js';", source)
+        self.assertIn("formatTopBarActivity", source)
         self.assertIn("formatTopBarActivity(this._trackerState, now)", source)
         self.assertNotIn("Focus Task 0:00", source)
 
@@ -50,6 +50,8 @@ class ExtensionScaffoldTest(unittest.TestCase):
             "addTaskToList",
             "removeTaskFromList",
             "renameTaskInList",
+            "resumePreviousTaskFromBreak",
+            "resumePreviousTaskFromInterruption",
             "switchToNextTask",
             "startBreakSession",
             "startInterruptionSession",
@@ -62,6 +64,8 @@ class ExtensionScaffoldTest(unittest.TestCase):
             "Switch to Next Task",
             "Start Break",
             "Start Interruption",
+            "End Break",
+            "End Interruption",
             "Switch to",
             "Rename",
             "Remove",

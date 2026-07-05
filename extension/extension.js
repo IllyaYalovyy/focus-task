@@ -8,17 +8,21 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 import {
-    ActivityKind,
     addTaskToList,
     createTrackerState,
     removeTaskFromList,
     renameTaskInList,
+    resumePreviousTaskFromBreak,
+    resumePreviousTaskFromInterruption,
     startBreakSession,
     startInterruptionSession,
     switchActiveTask,
     switchToNextTask,
 } from './activityModel.js';
-import {formatTopBarActivity} from './topBarViewModel.js';
+import {
+    formatTopBarActivity,
+    getBreakInterruptionMenuState,
+} from './topBarViewModel.js';
 
 function createId(prefix) {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -140,6 +144,28 @@ class FocusTaskIndicator extends PanelMenu.Button {
         }));
     }
 
+    _endBreak() {
+        this._applySessionSwitch(resumePreviousTaskFromBreak(
+            this._trackerState.taskList,
+            this._trackerState.activeSession,
+            {
+                sessionId: createId('session'),
+                resumedAt: new Date().toISOString(),
+            },
+        ));
+    }
+
+    _endInterruption() {
+        this._applySessionSwitch(resumePreviousTaskFromInterruption(
+            this._trackerState.taskList,
+            this._trackerState.activeSession,
+            {
+                sessionId: createId('session'),
+                resumedAt: new Date().toISOString(),
+            },
+        ));
+    }
+
     _createEntryControl({initialText = '', hintText, buttonText, onSubmit}) {
         const item = new PopupMenu.PopupBaseMenuItem({activate: false});
         const entry = new St.Entry({
@@ -186,16 +212,26 @@ class FocusTaskIndicator extends PanelMenu.Button {
         ));
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-        const canPauseTask = this._trackerState.activeSession?.activity?.kind === ActivityKind.TASK;
+        const breakInterruptionMenuState = getBreakInterruptionMenuState(this._trackerState);
         this.menu.addMenuItem(this._createActionItem(
             _('Start Break'),
             () => this._startBreak(),
-            {sensitive: canPauseTask},
+            {sensitive: breakInterruptionMenuState.canStartBreak},
         ));
         this.menu.addMenuItem(this._createActionItem(
             _('Start Interruption'),
             () => this._startInterruption(),
-            {sensitive: canPauseTask},
+            {sensitive: breakInterruptionMenuState.canStartInterruption},
+        ));
+        this.menu.addMenuItem(this._createActionItem(
+            _('End Break'),
+            () => this._endBreak(),
+            {sensitive: breakInterruptionMenuState.canEndBreak},
+        ));
+        this.menu.addMenuItem(this._createActionItem(
+            _('End Interruption'),
+            () => this._endInterruption(),
+            {sensitive: breakInterruptionMenuState.canEndInterruption},
         ));
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 

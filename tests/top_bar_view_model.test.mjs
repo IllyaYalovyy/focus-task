@@ -3,11 +3,15 @@ import test from 'node:test';
 
 import {
     createBreakActivity,
+    createInterruptionActivity,
     createTaskActivity,
     createTrackerState,
     startTrackedSession,
 } from '../extension/activityModel.js';
-import {formatTopBarActivity} from '../extension/topBarViewModel.js';
+import {
+    formatTopBarActivity,
+    getBreakInterruptionMenuState,
+} from '../extension/topBarViewModel.js';
 
 test('shows the current task and elapsed time in the top bar', () => {
     const task = createTaskActivity({id: 'task-1', name: 'Write model'});
@@ -44,4 +48,60 @@ test('shows break activity in the top bar when a break is current', () => {
 
 test('shows a neutral top bar label when no activity is current', () => {
     assert.equal(formatTopBarActivity(createTrackerState(), new Date()), 'Focus Task');
+});
+
+test('enables break and interruption starts only while a task is active', () => {
+    const task = createTaskActivity({id: 'task-1', name: 'Write model'});
+    const taskState = createTrackerState({
+        taskList: [task],
+        activeSession: startTrackedSession({
+            id: 'session-1',
+            activity: task,
+            startedAt: '2026-07-05T10:00:00.000Z',
+        }),
+    });
+    const idleState = createTrackerState();
+
+    assert.deepEqual(getBreakInterruptionMenuState(taskState), {
+        canStartBreak: true,
+        canStartInterruption: true,
+        canEndBreak: false,
+        canEndInterruption: false,
+    });
+    assert.deepEqual(getBreakInterruptionMenuState(idleState), {
+        canStartBreak: false,
+        canStartInterruption: false,
+        canEndBreak: false,
+        canEndInterruption: false,
+    });
+});
+
+test('enables the matching resume control while break or interruption is active', () => {
+    const breakState = createTrackerState({
+        activeSession: startTrackedSession({
+            id: 'session-1',
+            activity: createBreakActivity({id: 'break-1'}),
+            startedAt: '2026-07-05T10:00:00.000Z',
+        }),
+    });
+    const interruptionState = createTrackerState({
+        activeSession: startTrackedSession({
+            id: 'session-2',
+            activity: createInterruptionActivity({id: 'interruption-1'}),
+            startedAt: '2026-07-05T10:00:00.000Z',
+        }),
+    });
+
+    assert.deepEqual(getBreakInterruptionMenuState(breakState), {
+        canStartBreak: false,
+        canStartInterruption: false,
+        canEndBreak: true,
+        canEndInterruption: false,
+    });
+    assert.deepEqual(getBreakInterruptionMenuState(interruptionState), {
+        canStartBreak: false,
+        canStartInterruption: false,
+        canEndBreak: false,
+        canEndInterruption: true,
+    });
 });
