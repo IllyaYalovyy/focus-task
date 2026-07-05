@@ -33,6 +33,26 @@ function requireIsoTimestamp(value, fieldName) {
     return value;
 }
 
+function requireTaskList(taskList) {
+    if (!Array.isArray(taskList))
+        throw new Error('task list must be an array');
+
+    return taskList.map(task => {
+        if (!task || task.kind !== ActivityKind.TASK)
+            throw new Error('task list entries must be task activities');
+
+        return createTaskActivity(task);
+    });
+}
+
+function hasTaskId(taskList, taskId) {
+    return taskList.some(task => task.id === taskId);
+}
+
+function hasTaskName(taskList, taskName, ignoredTaskId = null) {
+    return taskList.some(task => task.id !== ignoredTaskId && task.name === taskName);
+}
+
 function createActivity({id, kind, name, comment}) {
     const activity = {
         id: requireNonEmptyString(id, 'activity id'),
@@ -53,6 +73,63 @@ export function createTaskActivity({id, name}) {
         kind: ActivityKind.TASK,
         name,
     });
+}
+
+export function createTaskList(tasks = []) {
+    const taskList = requireTaskList(tasks);
+    const seenIds = new Set();
+    const seenNames = new Set();
+
+    for (const task of taskList) {
+        if (seenIds.has(task.id))
+            throw new Error('task id already exists');
+
+        if (seenNames.has(task.name))
+            throw new Error('task name already exists');
+
+        seenIds.add(task.id);
+        seenNames.add(task.name);
+    }
+
+    return Object.freeze([...taskList]);
+}
+
+export function addTaskToList(taskList, taskInput) {
+    const tasks = requireTaskList(taskList);
+    const task = createTaskActivity(taskInput);
+
+    if (hasTaskId(tasks, task.id))
+        throw new Error('task id already exists');
+
+    if (hasTaskName(tasks, task.name))
+        throw new Error('task name already exists');
+
+    return createTaskList([...tasks, task]);
+}
+
+export function renameTaskInList(taskList, taskId, name) {
+    const tasks = requireTaskList(taskList);
+    const validTaskId = requireNonEmptyString(taskId, 'task id');
+
+    if (!hasTaskId(tasks, validTaskId))
+        throw new Error('task id does not exist');
+
+    const renamedTask = createTaskActivity({id: validTaskId, name});
+
+    if (hasTaskName(tasks, renamedTask.name, validTaskId))
+        throw new Error('task name already exists');
+
+    return createTaskList(tasks.map(task => task.id === validTaskId ? renamedTask : task));
+}
+
+export function removeTaskFromList(taskList, taskId) {
+    const tasks = requireTaskList(taskList);
+    const validTaskId = requireNonEmptyString(taskId, 'task id');
+
+    if (!hasTaskId(tasks, validTaskId))
+        throw new Error('task id does not exist');
+
+    return createTaskList(tasks.filter(task => task.id !== validTaskId));
 }
 
 export function createBreakActivity({id, name = 'Break'}) {
