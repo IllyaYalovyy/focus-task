@@ -36,6 +36,13 @@ class ExtensionScaffoldTest(unittest.TestCase):
         before_enable = source.split("enable()", 1)[0]
         self.assertNotIn("Main.panel.addToStatusArea", before_enable)
 
+    def test_extension_formats_top_bar_label_from_tracker_state(self):
+        source = EXTENSION_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("import {formatTopBarActivity} from './topBarViewModel.js';", source)
+        self.assertIn("formatTopBarActivity(this._trackerState, now)", source)
+        self.assertNotIn("Focus Task 0:00", source)
+
     def test_extension_file_has_no_repository_specific_paths(self):
         source = EXTENSION_PATH.read_text(encoding="utf-8")
         metadata = METADATA_PATH.read_text(encoding="utf-8")
