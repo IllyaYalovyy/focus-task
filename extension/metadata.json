@@ -1,0 +1,14 @@
+{
+  "uuid": "focus-task@yalovyy.com",
+  "name": "Focus Task",
+  "description": "Track the current task from the GNOME Shell top bar.",
+  "shell-version": [
+    "45",
+    "46",
+    "47",
+    "48",
+    "49"
+  ],
+  "gettext-domain": "focus-task",
+  "version": 1
+}

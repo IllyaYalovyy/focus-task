@@ -55,6 +55,10 @@ The default workflow is intentionally simple:
 ├── scripts/
 │   ├── init-project.sh          # Placeholder replacement for new projects
 │   └── quality.sh               # Generic local quality gate
+├── extension/
+│   ├── extension.js             # GNOME Shell extension entry point
+│   └── metadata.json            # GNOME Shell extension manifest
+├── tests/                       # Local regression tests
 └── .github/workflows/quality.yml
 ```
 
@@ -64,6 +68,12 @@ Run the local quality gate before asking for review:
 
 ```bash
 ./scripts/quality.sh
+```
+
+For the GNOME extension scaffold, the focused local check is:
+
+```bash
+python3 -m unittest discover -s tests
 ```
 
 The script detects common stacks and runs the relevant checks:
