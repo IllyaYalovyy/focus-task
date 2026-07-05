@@ -124,3 +124,25 @@ of being silently accepted.
 **Regression coverage:**
 `restores tracker state from persisted JSON-safe values`, `rejects invalid
 persisted tracker state`
+
+## UT-006: Generate Daily Reports
+
+**Precondition:** The extension has completed tracked sessions for the selected
+day and may have an active running activity.
+
+**Flow:**
+
+1. Select the day to review.
+2. Generate the daily report.
+
+**Outcome:** The report aggregates repeated task sessions by task identity,
+clips sessions to the selected UTC calendar day, shows total break and
+interruption time, includes interruption comments when provided, and identifies
+the running activity when it overlaps the selected day.
+
+**Interactions:** 2
+
+**Regression coverage:**
+`generates a daily report with aggregated tasks, breaks, and interruptions`,
+`generates a daily report that includes the running activity through now`,
+`rejects invalid daily report inputs`

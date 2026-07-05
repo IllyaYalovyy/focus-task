@@ -10,6 +10,7 @@ import {
     createTaskActivity,
     createTrackerState,
     endTrackedSession,
+    generateDailyReport,
     getTrackedSessionDurationMs,
     removeTaskFromList,
     renameTaskInList,
@@ -466,5 +467,135 @@ test('rejects invalid persisted tracker state', () => {
             activeSession: {...activeSession, endedAt: '2026-07-05T16:01:00.000Z'},
         }),
         /active session must be running/,
+    );
+});
+
+test('generates a daily report with aggregated tasks, breaks, and interruptions', () => {
+    const writeTask = createTaskActivity({id: 'task-1', name: 'Write model'});
+    const reviewTask = createTaskActivity({id: 'task-2', name: 'Review tests'});
+    const sessions = [
+        endTrackedSession(startTrackedSession({
+            id: 'session-1',
+            activity: writeTask,
+            startedAt: '2026-07-05T09:00:00.000Z',
+        }), '2026-07-05T09:25:00.000Z'),
+        endTrackedSession(startTrackedSession({
+            id: 'session-2',
+            activity: createBreakActivity({id: 'break-1', name: 'Lunch'}),
+            startedAt: '2026-07-05T09:25:00.000Z',
+        }), '2026-07-05T09:40:00.000Z'),
+        endTrackedSession(startTrackedSession({
+            id: 'session-3',
+            activity: writeTask,
+            startedAt: '2026-07-05T09:40:00.000Z',
+        }), '2026-07-05T10:00:00.000Z'),
+        endTrackedSession(startTrackedSession({
+            id: 'session-4',
+            activity: createInterruptionActivity({
+                id: 'interrupt-1',
+                name: 'Support request',
+                comment: 'Customer escalation',
+            }),
+            startedAt: '2026-07-05T10:00:00.000Z',
+        }), '2026-07-05T10:05:00.000Z'),
+        endTrackedSession(startTrackedSession({
+            id: 'session-5',
+            activity: reviewTask,
+            startedAt: '2026-07-05T23:50:00.000Z',
+        }), '2026-07-06T00:10:00.000Z'),
+    ];
+
+    const report = generateDailyReport(
+        createTrackerState({sessions}),
+        {date: '2026-07-05', now: '2026-07-05T12:00:00.000Z'},
+    );
+
+    assert.deepEqual(report, {
+        date: '2026-07-05',
+        tasks: [
+            {
+                id: 'task-1',
+                name: 'Write model',
+                totalMs: 45 * 60 * 1000,
+                isRunning: false,
+            },
+            {
+                id: 'task-2',
+                name: 'Review tests',
+                totalMs: 10 * 60 * 1000,
+                isRunning: false,
+            },
+        ],
+        breakTotalMs: 15 * 60 * 1000,
+        interruptionTotalMs: 5 * 60 * 1000,
+        interruptionComments: [{
+            sessionId: 'session-4',
+            activityId: 'interrupt-1',
+            comment: 'Customer escalation',
+        }],
+        runningActivity: null,
+    });
+});
+
+test('generates a daily report that includes the running activity through now', () => {
+    const task = createTaskActivity({id: 'task-1', name: 'Write model'});
+    const state = createTrackerState({
+        sessions: [
+            endTrackedSession(startTrackedSession({
+                id: 'session-1',
+                activity: task,
+                startedAt: '2026-07-04T23:45:00.000Z',
+            }), '2026-07-05T00:15:00.000Z'),
+        ],
+        activeSession: startTrackedSession({
+            id: 'session-2',
+            activity: task,
+            startedAt: '2026-07-05T10:30:00.000Z',
+        }),
+    });
+
+    const report = generateDailyReport(state, {
+        date: '2026-07-05',
+        now: '2026-07-05T11:00:00.000Z',
+    });
+
+    assert.deepEqual(report, {
+        date: '2026-07-05',
+        tasks: [{
+            id: 'task-1',
+            name: 'Write model',
+            totalMs: 45 * 60 * 1000,
+            isRunning: true,
+        }],
+        breakTotalMs: 0,
+        interruptionTotalMs: 0,
+        interruptionComments: [],
+        runningActivity: {
+            sessionId: 'session-2',
+            id: 'task-1',
+            kind: ActivityKind.TASK,
+            name: 'Write model',
+            startedAt: '2026-07-05T10:30:00.000Z',
+        },
+    });
+});
+
+test('rejects invalid daily report inputs', () => {
+    const state = createTrackerState();
+
+    assert.throws(
+        () => generateDailyReport(state, {
+            date: '2026-7-5',
+            now: '2026-07-05T11:00:00.000Z',
+        }),
+        /report date must be a YYYY-MM-DD date/,
+    );
+
+    assert.throws(
+        () => generateDailyReport(state, {
+            date: '2026-07-05',
+            now: 'not a date',
+        }),
+        /now must be a valid ISO timestamp/,
     );
 });

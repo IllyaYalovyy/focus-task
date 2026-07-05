@@ -33,6 +33,17 @@ function requireIsoTimestamp(value, fieldName) {
     return value;
 }
 
+function requireReportDate(value) {
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value))
+        throw new Error('report date must be a YYYY-MM-DD date');
+
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value)
+        throw new Error('report date must be a YYYY-MM-DD date');
+
+    return value;
+}
+
 function requireTaskList(taskList) {
     if (!Array.isArray(taskList))
         throw new Error('task list must be an array');
@@ -245,6 +256,84 @@ export function getTrackedSessionDurationMs(session, now = null) {
         throw new Error('session duration cannot be negative');
 
     return durationMs;
+}
+
+function getSessionOverlapMs(session, dayStartMs, dayEndMs, now) {
+    const sessionStartMs = Date.parse(session.startedAt);
+    const sessionEndMs = Date.parse(session.endedAt ?? now);
+    const overlapStartMs = Math.max(sessionStartMs, dayStartMs);
+    const overlapEndMs = Math.min(sessionEndMs, dayEndMs);
+
+    return Math.max(0, overlapEndMs - overlapStartMs);
+}
+
+function createRunningActivitySummary(session) {
+    return {
+        sessionId: session.id,
+        id: session.activity.id,
+        kind: session.activity.kind,
+        name: session.activity.name,
+        startedAt: session.startedAt,
+    };
+}
+
+export function generateDailyReport(state, {date, now = new Date().toISOString()} = {}) {
+    const reportDate = requireReportDate(date);
+    const validNow = requireIsoTimestamp(now, 'now');
+    const trackerState = createTrackerState(state);
+    const dayStartMs = Date.parse(`${reportDate}T00:00:00.000Z`);
+    const dayEndMs = dayStartMs + 24 * 60 * 60 * 1000;
+    const activeSession = trackerState.activeSession;
+    const reportSessions = activeSession === null
+        ? trackerState.sessions
+        : [...trackerState.sessions, activeSession];
+    const tasksById = new Map();
+    let breakTotalMs = 0;
+    let interruptionTotalMs = 0;
+    const interruptionComments = [];
+
+    for (const session of reportSessions) {
+        const overlapMs = getSessionOverlapMs(session, dayStartMs, dayEndMs, validNow);
+        if (overlapMs === 0)
+            continue;
+
+        const isRunning = session.endedAt === null;
+        if (session.activity.kind === ActivityKind.TASK) {
+            const existingTask = tasksById.get(session.activity.id);
+            tasksById.set(session.activity.id, {
+                id: session.activity.id,
+                name: session.activity.name,
+                totalMs: (existingTask?.totalMs ?? 0) + overlapMs,
+                isRunning: (existingTask?.isRunning ?? false) || isRunning,
+            });
+        } else if (session.activity.kind === ActivityKind.BREAK) {
+            breakTotalMs += overlapMs;
+        } else if (session.activity.kind === ActivityKind.INTERRUPTION) {
+            interruptionTotalMs += overlapMs;
+
+            if (session.activity.comment) {
+                interruptionComments.push(Object.freeze({
+                    sessionId: session.id,
+                    activityId: session.activity.id,
+                    comment: session.activity.comment,
+                }));
+            }
+        }
+    }
+
+    const runningActivity = activeSession !== null
+        && getSessionOverlapMs(activeSession, dayStartMs, dayEndMs, validNow) > 0
+        ? createRunningActivitySummary(activeSession)
+        : null;
+
+    return Object.freeze({
+        date: reportDate,
+        tasks: Object.freeze([...tasksById.values()].map(task => Object.freeze(task))),
+        breakTotalMs,
+        interruptionTotalMs,
+        interruptionComments: Object.freeze(interruptionComments),
+        runningActivity: runningActivity === null ? null : Object.freeze(runningActivity),
+    });
 }
 
 export function createTrackerState({taskList = [], sessions = [], activeSession = null} = {}) {
