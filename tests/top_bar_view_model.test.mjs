@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
     createBreakActivity,
+    createIdleActivity,
     createInterruptionActivity,
     createTaskActivity,
     createTrackerState,
@@ -137,6 +138,11 @@ test('formats daily and weekly report menu sections', () => {
                 }),
                 startedAt: '2026-07-08T08:45:00.000Z',
             }), '2026-07-08T08:50:00.000Z'),
+            endTrackedSession(startTrackedSession({
+                id: 'session-6',
+                activity: createIdleActivity({id: 'idle-1', name: 'Screen locked'}),
+                startedAt: '2026-07-08T08:50:00.000Z',
+            }), '2026-07-08T09:00:00.000Z'),
         ],
         activeSession: startTrackedSession({
             id: 'session-5',
@@ -155,6 +161,7 @@ test('formats daily and weekly report menu sections', () => {
                     'Review tests 0:30',
                     'Breaks 0:15',
                     'Interruptions 0:05',
+                    'Idle 0:10',
                     'Comment: Customer escalation',
                     'Running: Write model since 09:00 UTC',
                 ],
@@ -166,8 +173,9 @@ test('formats daily and weekly report menu sections', () => {
                     'Review tests 0:30',
                     'Breaks 0:15',
                     'Interruptions 0:05',
+                    'Idle 0:10',
                     '2026-07-06 total 1:00',
-                    '2026-07-08 total 1:10',
+                    '2026-07-08 total 1:20',
                     'Comment 2026-07-08: Customer escalation',
                     'Running: Write model since 2026-07-08 09:00 UTC',
                 ],

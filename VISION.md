@@ -19,16 +19,18 @@ current tasks and switch between them as context changes.
 ## Core Concepts
 
 - **Current activity**: the activity that is currently receiving the user's
-  attention. It can be a task, a break, or an interruption.
+  attention. It can be a task, a break, an interruption, or idle time.
 - **Task**: a named unit of work the user wants to track and return to later.
 - **Break**: intentional time away from work, such as lunch, rest, or a short
   pause.
 - **Interruption**: unplanned time caused by something outside the current task,
   such as a message, call, production issue, or quick request.
-- **Daily report**: an aggregated summary of tasks, breaks, and interruptions for
-  one calendar day.
-- **Weekly report**: an aggregated summary of daily activity across one calendar
-  week.
+- **Idle time**: time when tracking is paused because the session is locked,
+  suspended, or otherwise detected as away from the keyboard.
+- **Daily report**: an aggregated summary of tasks, breaks, interruptions, and
+  idle time for one calendar day.
+- **Weekly report**: an aggregated summary of daily activity, including idle
+  time, across one calendar week.
 
 ## MVP Use Cases
 
@@ -49,6 +51,8 @@ current tasks and switch between them as context changes.
 15. The user can see a report for any previous day with recorded activity.
 16. The user can see the current week's report.
 17. The user can see a report for any previous week with recorded activity.
+18. When the session locks, suspends, or is detected as idle, the extension stops
+    the current activity and records the elapsed away time as idle.
 
 ## Daily Report Requirements
 
@@ -58,7 +62,8 @@ current tasks and switch between them as context changes.
 4. The daily report shows total time spent on breaks.
 5. The daily report shows total time spent on interruptions.
 6. The daily report lists interruption comments when comments were provided.
-7. The daily report makes it clear which activity is still running, if any.
+7. The daily report shows total time spent idle.
+8. The daily report makes it clear which activity is still running, if any.
 
 ## Weekly Report Requirements
 
@@ -69,11 +74,12 @@ current tasks and switch between them as context changes.
 3. The weekly report shows total time spent on breaks for the selected week.
 4. The weekly report shows total time spent on interruptions for the selected
    week.
-5. The weekly report provides a day-by-day breakdown so the user can see how the
+5. The weekly report shows total time spent idle for the selected week.
+6. The weekly report provides a day-by-day breakdown so the user can see how the
    week was distributed.
-6. The weekly report makes it easy to identify the most time-consuming tasks and
+7. The weekly report makes it easy to identify the most time-consuming tasks and
    the days with the highest interruption cost.
-7. The weekly report uses a clear week boundary, such as the user's locale or a
+8. The weekly report uses a clear week boundary, such as the user's locale or a
    configurable week start day.
 
 ## Important Edge Cases
@@ -84,9 +90,10 @@ current tasks and switch between them as context changes.
    should be paused and remembered for later resumption.
 3. If GNOME Shell restarts, the extension should preserve enough state to avoid
    losing the current activity and the day's tracked time.
-4. If the computer sleeps or the session is locked, the extension should have a
-   clear behavior for whether that time counts as the current activity, a break,
-   or idle time.
+4. If the computer sleeps or the session is locked, the current activity should
+   stop at the lock or suspend time and the away time should count as idle time,
+   not as task, break, or interruption time. The extension should not
+   automatically resume the previous task after idle time.
 5. If the user removes a task that already has tracked time, historical report
    data should remain intact.
 6. If the same task name is added more than once, the extension should avoid
