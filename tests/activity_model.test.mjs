@@ -3,11 +3,15 @@ import assert from 'node:assert/strict';
 
 import {
     ActivityKind,
+    addTaskToList,
     createBreakActivity,
     createInterruptionActivity,
+    createTaskList,
     createTaskActivity,
     endTrackedSession,
     getTrackedSessionDurationMs,
+    removeTaskFromList,
+    renameTaskInList,
     startTrackedSession,
 } from '../extension/activityModel.js';
 
@@ -46,6 +50,89 @@ test('rejects activities without meaningful ids or names', () => {
         () => createTaskActivity({id: 'task-1', name: ' '}),
         /activity name must be a non-empty string/,
     );
+});
+
+test('adds tasks to the current task list without mutating prior lists', () => {
+    const emptyList = createTaskList();
+    const firstList = addTaskToList(emptyList, {id: 'task-1', name: '  Write tests  '});
+    const secondList = addTaskToList(firstList, {id: 'task-2', name: 'Review model'});
+
+    assert.deepEqual(emptyList, []);
+    assert.deepEqual(firstList, [
+        {id: 'task-1', kind: ActivityKind.TASK, name: 'Write tests'},
+    ]);
+    assert.deepEqual(secondList, [
+        {id: 'task-1', kind: ActivityKind.TASK, name: 'Write tests'},
+        {id: 'task-2', kind: ActivityKind.TASK, name: 'Review model'},
+    ]);
+});
+
+test('rejects duplicate current tasks by id or normalized name', () => {
+    const taskList = addTaskToList(createTaskList(), {id: 'task-1', name: 'Write tests'});
+
+    assert.throws(
+        () => addTaskToList(taskList, {id: 'task-1', name: 'Review model'}),
+        /task id already exists/,
+    );
+
+    assert.throws(
+        () => addTaskToList(taskList, {id: 'task-2', name: '  Write tests  '}),
+        /task name already exists/,
+    );
+});
+
+test('renames a task in the current task list without changing its identity', () => {
+    const taskList = addTaskToList(
+        addTaskToList(createTaskList(), {id: 'task-1', name: 'Write tests'}),
+        {id: 'task-2', name: 'Review model'},
+    );
+
+    const renamedList = renameTaskInList(taskList, 'task-1', '  Write activity model  ');
+
+    assert.deepEqual(taskList[0], {id: 'task-1', kind: ActivityKind.TASK, name: 'Write tests'});
+    assert.deepEqual(renamedList, [
+        {id: 'task-1', kind: ActivityKind.TASK, name: 'Write activity model'},
+        {id: 'task-2', kind: ActivityKind.TASK, name: 'Review model'},
+    ]);
+});
+
+test('rejects current task list changes for unknown ids or duplicate names', () => {
+    const taskList = addTaskToList(
+        addTaskToList(createTaskList(), {id: 'task-1', name: 'Write tests'}),
+        {id: 'task-2', name: 'Review model'},
+    );
+
+    assert.throws(
+        () => renameTaskInList(taskList, 'missing-task', 'Draft docs'),
+        /task id does not exist/,
+    );
+
+    assert.throws(
+        () => renameTaskInList(taskList, 'task-2', '  Write tests  '),
+        /task name already exists/,
+    );
+
+    assert.throws(
+        () => removeTaskFromList(taskList, 'missing-task'),
+        /task id does not exist/,
+    );
+});
+
+test('removes a task from the current task list without mutating prior lists', () => {
+    const taskList = addTaskToList(
+        addTaskToList(createTaskList(), {id: 'task-1', name: 'Write tests'}),
+        {id: 'task-2', name: 'Review model'},
+    );
+
+    const remainingList = removeTaskFromList(taskList, 'task-1');
+
+    assert.deepEqual(taskList, [
+        {id: 'task-1', kind: ActivityKind.TASK, name: 'Write tests'},
+        {id: 'task-2', kind: ActivityKind.TASK, name: 'Review model'},
+    ]);
+    assert.deepEqual(remainingList, [
+        {id: 'task-2', kind: ActivityKind.TASK, name: 'Review model'},
+    ]);
 });
 
 test('starts and ends tracked sessions without mutating the original session', () => {

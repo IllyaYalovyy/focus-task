@@ -11,17 +11,26 @@ Each task should define:
 - **Interactions** - count of meaningful actions in the happy path
 - **Regression coverage** - test name or reason coverage is manual
 
-## UT-001: [Task Name]
+## UT-001: Manage Current Task List
 
-**Precondition:** ...
+**Precondition:** The extension has a current task list, which may be empty or
+contain existing named tasks.
 
 **Flow:**
 
-1. ...
-2. ...
+1. Add a task by entering a meaningful task name.
+2. Rename an existing task when its name is unclear.
+3. Remove a task that no longer belongs in the current list.
 
-**Outcome:** ...
+**Outcome:** The current task list keeps stable task identities, stores trimmed
+task names, preserves task order, rejects duplicate task ids or names, and makes
+add, rename, and remove operations without mutating earlier list values.
 
-**Interactions:** ...
+**Interactions:** 3
 
-**Regression coverage:** ...
+**Regression coverage:**
+`adds tasks to the current task list without mutating prior lists`, `rejects
+duplicate current tasks by id or normalized name`, `renames a task in the
+current task list without changing its identity`, `rejects current task list
+changes for unknown ids or duplicate names`, `removes a task from the current
+task list without mutating prior lists`
