@@ -8,12 +8,15 @@ import {
     createInterruptionActivity,
     createTaskList,
     createTaskActivity,
+    createTrackerState,
     endTrackedSession,
     getTrackedSessionDurationMs,
     removeTaskFromList,
     renameTaskInList,
+    restoreTrackerState,
     resumePreviousTaskFromInterruption,
     resumePreviousTaskFromBreak,
+    serializeTrackerState,
     startBreakSession,
     startInterruptionSession,
     startTrackedSession,
@@ -391,5 +394,77 @@ test('rejects sessions with invalid chronology', () => {
     assert.throws(
         () => endTrackedSession(session, '2026-07-05T15:59:59.999Z'),
         /endedAt must be greater than or equal to startedAt/,
+    );
+});
+
+test('restores tracker state from persisted JSON-safe values', () => {
+    const taskList = addTaskToList(createTaskList(), {id: 'task-1', name: 'Write model'});
+    const taskSession = startTrackedSession({
+        id: 'session-1',
+        activity: taskList[0],
+        startedAt: '2026-07-05T16:00:00.000Z',
+    });
+    const breakSwitch = startBreakSession(taskSession, {
+        sessionId: 'session-2',
+        breakId: 'break-1',
+        startedAt: '2026-07-05T16:25:00.000Z',
+    });
+    const state = createTrackerState({
+        taskList,
+        sessions: [breakSwitch.endedSession],
+        activeSession: breakSwitch.activeSession,
+    });
+    const persisted = JSON.parse(JSON.stringify(serializeTrackerState(state)));
+
+    const restored = restoreTrackerState(persisted);
+
+    assert.deepEqual(restored, {
+        taskList: [
+            {id: 'task-1', kind: ActivityKind.TASK, name: 'Write model'},
+        ],
+        sessions: [{
+            id: 'session-1',
+            activity: {id: 'task-1', kind: ActivityKind.TASK, name: 'Write model'},
+            startedAt: '2026-07-05T16:00:00.000Z',
+            endedAt: '2026-07-05T16:25:00.000Z',
+        }],
+        activeSession: {
+            id: 'session-2',
+            activity: {id: 'break-1', kind: ActivityKind.BREAK, name: 'Break'},
+            startedAt: '2026-07-05T16:25:00.000Z',
+            endedAt: null,
+            resumesActivity: {id: 'task-1', kind: ActivityKind.TASK, name: 'Write model'},
+        },
+    });
+    assert.throws(
+        () => restored.sessions.push(restored.activeSession),
+        /Cannot add property/,
+    );
+});
+
+test('rejects invalid persisted tracker state', () => {
+    const task = createTaskActivity({id: 'task-1', name: 'Write model'});
+    const activeSession = startTrackedSession({
+        id: 'session-1',
+        activity: task,
+        startedAt: '2026-07-05T16:00:00.000Z',
+    });
+
+    assert.throws(
+        () => restoreTrackerState({
+            taskList: [{id: 'task-1', kind: ActivityKind.TASK, name: 'Write model'}],
+            sessions: [activeSession],
+            activeSession: null,
+        }),
+        /persisted session history entries must be ended/,
+    );
+
+    assert.throws(
+        () => restoreTrackerState({
+            taskList: [{id: 'task-1', kind: ActivityKind.TASK, name: 'Write model'}],
+            sessions: [],
+            activeSession: {...activeSession, endedAt: '2026-07-05T16:01:00.000Z'},
+        }),
+        /active session must be running/,
     );
 });

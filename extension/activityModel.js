@@ -64,6 +64,51 @@ function requireTaskActivity(activity, fieldName) {
     return createTaskActivity(activity);
 }
 
+function requireModeledActivity(activity, fieldName) {
+    if (!activity || typeof activity !== 'object')
+        throw new Error(`${fieldName} must be a modeled activity`);
+
+    if (activity.kind === ActivityKind.TASK)
+        return createTaskActivity(activity);
+
+    if (activity.kind === ActivityKind.BREAK)
+        return createBreakActivity(activity);
+
+    if (activity.kind === ActivityKind.INTERRUPTION)
+        return createInterruptionActivity(activity);
+
+    throw new Error(`${fieldName} must be a modeled activity`);
+}
+
+function createTrackedSessionFromPersisted(session, fieldName = 'session') {
+    if (!session || typeof session !== 'object')
+        throw new Error(`${fieldName} must be a tracked session`);
+
+    const activity = requireModeledActivity(session.activity, `${fieldName} activity`);
+    const startedAt = requireIsoTimestamp(session.startedAt, 'startedAt');
+    const endedAt = session.endedAt === null
+        ? null
+        : requireIsoTimestamp(session.endedAt, 'endedAt');
+
+    if (endedAt !== null && Date.parse(endedAt) < Date.parse(startedAt))
+        throw new Error('endedAt must be greater than or equal to startedAt');
+
+    const restoredSession = {
+        id: requireNonEmptyString(session.id, 'session id'),
+        activity,
+        startedAt,
+        endedAt,
+    };
+
+    if (session.resumesActivity !== undefined)
+        restoredSession.resumesActivity = requireTaskActivity(
+            session.resumesActivity,
+            'resumesActivity',
+        );
+
+    return Object.freeze(restoredSession);
+}
+
 function createActivity({id, kind, name, comment}) {
     const activity = {
         id: requireNonEmptyString(id, 'activity id'),
@@ -200,6 +245,72 @@ export function getTrackedSessionDurationMs(session, now = null) {
         throw new Error('session duration cannot be negative');
 
     return durationMs;
+}
+
+export function createTrackerState({taskList = [], sessions = [], activeSession = null} = {}) {
+    const tasks = createTaskList(taskList);
+
+    if (!Array.isArray(sessions))
+        throw new Error('persisted session history must be an array');
+
+    const endedSessions = sessions.map(session => {
+        const restoredSession = createTrackedSessionFromPersisted(session);
+
+        if (restoredSession.endedAt === null)
+            throw new Error('persisted session history entries must be ended');
+
+        return restoredSession;
+    });
+
+    const restoredActiveSession = activeSession === null
+        ? null
+        : createTrackedSessionFromPersisted(activeSession, 'active session');
+
+    if (restoredActiveSession !== null && restoredActiveSession.endedAt !== null)
+        throw new Error('active session must be running');
+
+    return Object.freeze({
+        taskList: tasks,
+        sessions: Object.freeze([...endedSessions]),
+        activeSession: restoredActiveSession,
+    });
+}
+
+function serializeActivity(activity) {
+    return {...activity};
+}
+
+function serializeSession(session) {
+    const serializedSession = {
+        id: session.id,
+        activity: serializeActivity(session.activity),
+        startedAt: session.startedAt,
+        endedAt: session.endedAt,
+    };
+
+    if (session.resumesActivity !== undefined)
+        serializedSession.resumesActivity = serializeActivity(session.resumesActivity);
+
+    return serializedSession;
+}
+
+export function serializeTrackerState(state) {
+    const trackerState = createTrackerState(state);
+
+    return {
+        taskList: trackerState.taskList.map(serializeActivity),
+        sessions: trackerState.sessions.map(serializeSession),
+        activeSession: trackerState.activeSession === null
+            ? null
+            : serializeSession(trackerState.activeSession),
+    };
+}
+
+export function restoreTrackerState(persistedState) {
+    if (!persistedState || typeof persistedState !== 'object')
+        throw new Error('persisted tracker state must be an object');
+
+    return createTrackerState(persistedState);
 }
 
 export function switchActiveTask(taskList, currentSession, {sessionId, taskId, switchedAt}) {

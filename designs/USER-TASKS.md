@@ -102,3 +102,25 @@ session for the interrupted task without mutating prior session values.
 **Regression coverage:**
 `starts an interruption by pausing the current task with an optional comment`,
 `ends an interruption and resumes the previously active task`
+
+## UT-005: Restore Tracking After Restart
+
+**Precondition:** The extension has a current task list, completed tracked
+sessions for the day, and may have an active task, break, or interruption
+session when GNOME Shell restarts.
+
+**Flow:**
+
+1. Persist the tracker state before shutdown or restart.
+2. Restore the tracker state after the extension starts again.
+
+**Outcome:** The restored state preserves the current task list, completed
+session history, active running session, and previous-task reference for a
+running break or interruption. Invalid persisted state fails explicitly instead
+of being silently accepted.
+
+**Interactions:** 0
+
+**Regression coverage:**
+`restores tracker state from persisted JSON-safe values`, `rejects invalid
+persisted tracker state`
