@@ -22,6 +22,7 @@ import {
 import {
     formatTopBarActivity,
     getBreakInterruptionMenuState,
+    getReportMenuState,
 } from './topBarViewModel.js';
 
 function createId(prefix) {
@@ -197,6 +198,22 @@ class FocusTaskIndicator extends PanelMenu.Button {
         return item;
     }
 
+    _createReportLine(label) {
+        const item = new PopupMenu.PopupMenuItem(label);
+        item.setSensitive(false);
+
+        return item;
+    }
+
+    _createReportMenu(reportSection) {
+        const reportMenu = new PopupMenu.PopupSubMenuMenuItem(reportSection.title);
+
+        for (const line of reportSection.lines)
+            reportMenu.menu.addMenuItem(this._createReportLine(line));
+
+        return reportMenu;
+    }
+
     _rebuildMenu() {
         this.menu.removeAll();
 
@@ -233,6 +250,11 @@ class FocusTaskIndicator extends PanelMenu.Button {
             () => this._endInterruption(),
             {sensitive: breakInterruptionMenuState.canEndInterruption},
         ));
+        this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+
+        const reportMenuState = getReportMenuState(this._trackerState);
+        this.menu.addMenuItem(this._createReportMenu(reportMenuState.daily));
+        this.menu.addMenuItem(this._createReportMenu(reportMenuState.weekly));
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
         for (const task of this._trackerState.taskList) {
