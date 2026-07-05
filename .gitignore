@@ -7,6 +7,8 @@
 .copilot/
 .aider*
 .codex/
+.ktask/
+.ktask/**
 .tabnine/
 .continue/
 .windsurf/
