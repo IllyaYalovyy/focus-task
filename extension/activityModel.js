@@ -259,6 +259,28 @@ export function startBreakSession(currentSession, {sessionId, breakId, name = 'B
     });
 }
 
+export function startInterruptionSession(
+    currentSession,
+    {sessionId, interruptionId, name = 'Interruption', comment = null, startedAt},
+) {
+    const interruptionSession = startTrackedSession({
+        id: sessionId,
+        activity: createInterruptionActivity({id: interruptionId, name, comment}),
+        startedAt,
+    });
+
+    const resumesActivity = currentSession === null
+        ? null
+        : requireTaskActivity(currentSession.activity, 'previous activity');
+
+    return Object.freeze({
+        endedSession: currentSession === null ? null : endTrackedSession(currentSession, startedAt),
+        activeSession: resumesActivity === null
+            ? interruptionSession
+            : Object.freeze({...interruptionSession, resumesActivity}),
+    });
+}
+
 export function resumePreviousTaskFromBreak(taskList, currentSession, {sessionId, resumedAt}) {
     const tasks = requireTaskList(taskList);
 
@@ -268,6 +290,32 @@ export function resumePreviousTaskFromBreak(taskList, currentSession, {sessionId
     const previousActivity = currentSession.resumesActivity;
     if (!previousActivity)
         throw new Error('break session does not have a previous task to resume');
+
+    const previousTask = requireTaskActivity(previousActivity, 'previous activity');
+    const resumedTask = findTaskById(tasks, previousTask.id);
+
+    if (resumedTask === null)
+        throw new Error('task id does not exist');
+
+    return Object.freeze({
+        endedSession: endTrackedSession(currentSession, resumedAt),
+        activeSession: startTrackedSession({
+            id: sessionId,
+            activity: resumedTask,
+            startedAt: resumedAt,
+        }),
+    });
+}
+
+export function resumePreviousTaskFromInterruption(taskList, currentSession, {sessionId, resumedAt}) {
+    const tasks = requireTaskList(taskList);
+
+    if (!currentSession || currentSession.activity?.kind !== ActivityKind.INTERRUPTION)
+        throw new Error('current session must be an interruption session');
+
+    const previousActivity = currentSession.resumesActivity;
+    if (!previousActivity)
+        throw new Error('interruption session does not have a previous task to resume');
 
     const previousTask = requireTaskActivity(previousActivity, 'previous activity');
     const resumedTask = findTaskById(tasks, previousTask.id);

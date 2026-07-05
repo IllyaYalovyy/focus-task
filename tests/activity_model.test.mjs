@@ -12,8 +12,10 @@ import {
     getTrackedSessionDurationMs,
     removeTaskFromList,
     renameTaskInList,
+    resumePreviousTaskFromInterruption,
     resumePreviousTaskFromBreak,
     startBreakSession,
+    startInterruptionSession,
     startTrackedSession,
     switchActiveTask,
     switchToNextTask,
@@ -261,6 +263,72 @@ test('ends a break and resumes the previously active task', () => {
 
     assert.deepEqual(resumed.endedSession, {
         ...breakSession,
+        endedAt: '2026-07-05T16:40:00.000Z',
+    });
+    assert.deepEqual(resumed.activeSession, {
+        id: 'session-3',
+        activity: {id: 'task-1', kind: ActivityKind.TASK, name: 'Write model'},
+        startedAt: '2026-07-05T16:40:00.000Z',
+        endedAt: null,
+    });
+});
+
+test('starts an interruption by pausing the current task with an optional comment', () => {
+    const task = createTaskActivity({id: 'task-1', name: 'Write model'});
+    const currentSession = startTrackedSession({
+        id: 'session-1',
+        activity: task,
+        startedAt: '2026-07-05T16:00:00.000Z',
+    });
+
+    const interruptionSwitch = startInterruptionSession(currentSession, {
+        sessionId: 'session-2',
+        interruptionId: 'interrupt-1',
+        name: 'Support request',
+        comment: '  Customer escalation  ',
+        startedAt: '2026-07-05T16:25:00.000Z',
+    });
+
+    assert.deepEqual(interruptionSwitch.endedSession, {
+        id: 'session-1',
+        activity: task,
+        startedAt: '2026-07-05T16:00:00.000Z',
+        endedAt: '2026-07-05T16:25:00.000Z',
+    });
+    assert.deepEqual(interruptionSwitch.activeSession, {
+        id: 'session-2',
+        activity: {
+            id: 'interrupt-1',
+            kind: ActivityKind.INTERRUPTION,
+            name: 'Support request',
+            comment: 'Customer escalation',
+        },
+        startedAt: '2026-07-05T16:25:00.000Z',
+        endedAt: null,
+        resumesActivity: task,
+    });
+    assert.equal(currentSession.endedAt, null);
+});
+
+test('ends an interruption and resumes the previously active task', () => {
+    const taskList = addTaskToList(createTaskList(), {id: 'task-1', name: 'Write model'});
+    const interruptionSession = startInterruptionSession(startTrackedSession({
+        id: 'session-1',
+        activity: taskList[0],
+        startedAt: '2026-07-05T16:00:00.000Z',
+    }), {
+        sessionId: 'session-2',
+        interruptionId: 'interrupt-1',
+        startedAt: '2026-07-05T16:25:00.000Z',
+    }).activeSession;
+
+    const resumed = resumePreviousTaskFromInterruption(taskList, interruptionSession, {
+        sessionId: 'session-3',
+        resumedAt: '2026-07-05T16:40:00.000Z',
+    });
+
+    assert.deepEqual(resumed.endedSession, {
+        ...interruptionSession,
         endedAt: '2026-07-05T16:40:00.000Z',
     });
     assert.deepEqual(resumed.activeSession, {

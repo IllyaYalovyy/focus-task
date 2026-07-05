@@ -78,3 +78,27 @@ session values.
 **Regression coverage:**
 `starts a break by pausing the current task for later resumption`, `ends a break
 and resumes the previously active task`
+
+## UT-004: Track an Interruption and Resume Work
+
+**Precondition:** The extension has a current task list containing the active
+task, and that task has a currently running session.
+
+**Flow:**
+
+1. Start an interruption while a task is active.
+2. Optionally add a comment describing the interruption.
+3. End the interruption.
+
+**Outcome:** Starting the interruption ends the active task session at the
+interruption start time, starts an interruption session at that same time,
+stores an optional trimmed comment on the interruption activity when provided,
+and stores the interrupted task identity on the interruption session. Ending the
+interruption ends the interruption session at the resume time and starts a new
+session for the interrupted task without mutating prior session values.
+
+**Interactions:** 3
+
+**Regression coverage:**
+`starts an interruption by pausing the current task with an optional comment`,
+`ends an interruption and resumes the previously active task`
