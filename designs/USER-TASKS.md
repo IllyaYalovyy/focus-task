@@ -34,3 +34,25 @@ duplicate current tasks by id or normalized name`, `renames a task in the
 current task list without changing its identity`, `rejects current task list
 changes for unknown ids or duplicate names`, `removes a task from the current
 task list without mutating prior lists`
+
+## UT-002: Switch Between Active Tasks
+
+**Precondition:** The extension has a current task list containing at least one
+task. It may also have a currently running task session.
+
+**Flow:**
+
+1. Switch directly to a selected task from the current task list.
+2. Switch to the next task in current task list order.
+
+**Outcome:** Switching ends the previously running session at the switch time,
+starts a new session for the selected task at the same time, preserves immutable
+session history, rejects unknown task ids, and wraps next-task switching from
+the end of the list back to the first task.
+
+**Interactions:** 2
+
+**Regression coverage:**
+`switches the active task by ending the current session and starting the
+selected task`, `rejects switching to a task outside the current task list`,
+`switches to the next task in current task list order`

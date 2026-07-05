@@ -13,6 +13,8 @@ import {
     removeTaskFromList,
     renameTaskInList,
     startTrackedSession,
+    switchActiveTask,
+    switchToNextTask,
 } from '../extension/activityModel.js';
 
 test('models task, break, and interruption activities with stable identities', () => {
@@ -133,6 +135,78 @@ test('removes a task from the current task list without mutating prior lists', (
     assert.deepEqual(remainingList, [
         {id: 'task-2', kind: ActivityKind.TASK, name: 'Review model'},
     ]);
+});
+
+test('switches the active task by ending the current session and starting the selected task', () => {
+    const taskList = addTaskToList(
+        addTaskToList(createTaskList(), {id: 'task-1', name: 'Write tests'}),
+        {id: 'task-2', name: 'Review model'},
+    );
+    const currentSession = startTrackedSession({
+        id: 'session-1',
+        activity: taskList[0],
+        startedAt: '2026-07-05T16:00:00.000Z',
+    });
+
+    const switched = switchActiveTask(taskList, currentSession, {
+        sessionId: 'session-2',
+        taskId: 'task-2',
+        switchedAt: '2026-07-05T16:25:00.000Z',
+    });
+
+    assert.deepEqual(switched.endedSession, {
+        id: 'session-1',
+        activity: {id: 'task-1', kind: ActivityKind.TASK, name: 'Write tests'},
+        startedAt: '2026-07-05T16:00:00.000Z',
+        endedAt: '2026-07-05T16:25:00.000Z',
+    });
+    assert.deepEqual(switched.activeSession, {
+        id: 'session-2',
+        activity: {id: 'task-2', kind: ActivityKind.TASK, name: 'Review model'},
+        startedAt: '2026-07-05T16:25:00.000Z',
+        endedAt: null,
+    });
+    assert.equal(currentSession.endedAt, null);
+});
+
+test('rejects switching to a task outside the current task list', () => {
+    const taskList = addTaskToList(createTaskList(), {id: 'task-1', name: 'Write tests'});
+
+    assert.throws(
+        () => switchActiveTask(taskList, null, {
+            sessionId: 'session-1',
+            taskId: 'missing-task',
+            switchedAt: '2026-07-05T16:00:00.000Z',
+        }),
+        /task id does not exist/,
+    );
+});
+
+test('switches to the next task in current task list order', () => {
+    const taskList = addTaskToList(
+        addTaskToList(createTaskList(), {id: 'task-1', name: 'Write tests'}),
+        {id: 'task-2', name: 'Review model'},
+    );
+    const currentSession = startTrackedSession({
+        id: 'session-1',
+        activity: taskList[0],
+        startedAt: '2026-07-05T16:00:00.000Z',
+    });
+
+    const switched = switchToNextTask(taskList, currentSession, {
+        sessionId: 'session-2',
+        switchedAt: '2026-07-05T16:25:00.000Z',
+    });
+
+    assert.equal(switched.activeSession.activity.id, 'task-2');
+    assert.equal(switched.endedSession.endedAt, '2026-07-05T16:25:00.000Z');
+
+    const wrapped = switchToNextTask(taskList, switched.activeSession, {
+        sessionId: 'session-3',
+        switchedAt: '2026-07-05T16:40:00.000Z',
+    });
+
+    assert.equal(wrapped.activeSession.activity.id, 'task-1');
 });
 
 test('starts and ends tracked sessions without mutating the original session', () => {
