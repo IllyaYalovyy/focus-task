@@ -57,6 +57,13 @@ function findTaskById(taskList, taskId) {
     return taskList.find(task => task.id === taskId) ?? null;
 }
 
+function requireTaskActivity(activity, fieldName) {
+    if (!activity || activity.kind !== ActivityKind.TASK)
+        throw new Error(`${fieldName} must be a task activity`);
+
+    return createTaskActivity(activity);
+}
+
 function createActivity({id, kind, name, comment}) {
     const activity = {
         id: requireNonEmptyString(id, 'activity id'),
@@ -230,5 +237,50 @@ export function switchToNextTask(taskList, currentSession, {sessionId, switchedA
         sessionId,
         taskId: nextTask.id,
         switchedAt,
+    });
+}
+
+export function startBreakSession(currentSession, {sessionId, breakId, name = 'Break', startedAt}) {
+    const breakSession = startTrackedSession({
+        id: sessionId,
+        activity: createBreakActivity({id: breakId, name}),
+        startedAt,
+    });
+
+    const resumesActivity = currentSession === null
+        ? null
+        : requireTaskActivity(currentSession.activity, 'previous activity');
+
+    return Object.freeze({
+        endedSession: currentSession === null ? null : endTrackedSession(currentSession, startedAt),
+        activeSession: resumesActivity === null
+            ? breakSession
+            : Object.freeze({...breakSession, resumesActivity}),
+    });
+}
+
+export function resumePreviousTaskFromBreak(taskList, currentSession, {sessionId, resumedAt}) {
+    const tasks = requireTaskList(taskList);
+
+    if (!currentSession || currentSession.activity?.kind !== ActivityKind.BREAK)
+        throw new Error('current session must be a break session');
+
+    const previousActivity = currentSession.resumesActivity;
+    if (!previousActivity)
+        throw new Error('break session does not have a previous task to resume');
+
+    const previousTask = requireTaskActivity(previousActivity, 'previous activity');
+    const resumedTask = findTaskById(tasks, previousTask.id);
+
+    if (resumedTask === null)
+        throw new Error('task id does not exist');
+
+    return Object.freeze({
+        endedSession: endTrackedSession(currentSession, resumedAt),
+        activeSession: startTrackedSession({
+            id: sessionId,
+            activity: resumedTask,
+            startedAt: resumedAt,
+        }),
     });
 }

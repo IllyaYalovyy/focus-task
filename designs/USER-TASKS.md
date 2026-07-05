@@ -56,3 +56,25 @@ the end of the list back to the first task.
 `switches the active task by ending the current session and starting the
 selected task`, `rejects switching to a task outside the current task list`,
 `switches to the next task in current task list order`
+
+## UT-003: Take a Break and Resume Work
+
+**Precondition:** The extension has a current task list containing the active
+task, and that task has a currently running session.
+
+**Flow:**
+
+1. Start a break while a task is active.
+2. End the break.
+
+**Outcome:** Starting the break ends the active task session at the break start
+time, starts a break session at that same time, and stores the paused task
+identity on the break session. Ending the break ends the break session at the
+resume time and starts a new session for the paused task without mutating prior
+session values.
+
+**Interactions:** 2
+
+**Regression coverage:**
+`starts a break by pausing the current task for later resumption`, `ends a break
+and resumes the previously active task`

@@ -12,6 +12,8 @@ import {
     getTrackedSessionDurationMs,
     removeTaskFromList,
     renameTaskInList,
+    resumePreviousTaskFromBreak,
+    startBreakSession,
     startTrackedSession,
     switchActiveTask,
     switchToNextTask,
@@ -207,6 +209,66 @@ test('switches to the next task in current task list order', () => {
     });
 
     assert.equal(wrapped.activeSession.activity.id, 'task-1');
+});
+
+test('starts a break by pausing the current task for later resumption', () => {
+    const task = createTaskActivity({id: 'task-1', name: 'Write model'});
+    const currentSession = startTrackedSession({
+        id: 'session-1',
+        activity: task,
+        startedAt: '2026-07-05T16:00:00.000Z',
+    });
+
+    const breakSwitch = startBreakSession(currentSession, {
+        sessionId: 'session-2',
+        breakId: 'break-1',
+        name: 'Lunch',
+        startedAt: '2026-07-05T16:25:00.000Z',
+    });
+
+    assert.deepEqual(breakSwitch.endedSession, {
+        id: 'session-1',
+        activity: task,
+        startedAt: '2026-07-05T16:00:00.000Z',
+        endedAt: '2026-07-05T16:25:00.000Z',
+    });
+    assert.deepEqual(breakSwitch.activeSession, {
+        id: 'session-2',
+        activity: {id: 'break-1', kind: ActivityKind.BREAK, name: 'Lunch'},
+        startedAt: '2026-07-05T16:25:00.000Z',
+        endedAt: null,
+        resumesActivity: task,
+    });
+    assert.equal(currentSession.endedAt, null);
+});
+
+test('ends a break and resumes the previously active task', () => {
+    const taskList = addTaskToList(createTaskList(), {id: 'task-1', name: 'Write model'});
+    const breakSession = startBreakSession(startTrackedSession({
+        id: 'session-1',
+        activity: taskList[0],
+        startedAt: '2026-07-05T16:00:00.000Z',
+    }), {
+        sessionId: 'session-2',
+        breakId: 'break-1',
+        startedAt: '2026-07-05T16:25:00.000Z',
+    }).activeSession;
+
+    const resumed = resumePreviousTaskFromBreak(taskList, breakSession, {
+        sessionId: 'session-3',
+        resumedAt: '2026-07-05T16:40:00.000Z',
+    });
+
+    assert.deepEqual(resumed.endedSession, {
+        ...breakSession,
+        endedAt: '2026-07-05T16:40:00.000Z',
+    });
+    assert.deepEqual(resumed.activeSession, {
+        id: 'session-3',
+        activity: {id: 'task-1', kind: ActivityKind.TASK, name: 'Write model'},
+        startedAt: '2026-07-05T16:40:00.000Z',
+        endedAt: null,
+    });
 });
 
 test('starts and ends tracked sessions without mutating the original session', () => {
