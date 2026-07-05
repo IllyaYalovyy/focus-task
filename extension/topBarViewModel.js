@@ -58,6 +58,7 @@ function formatDailyReportLines(report) {
 
     lines.push(`Breaks ${formatElapsedDuration(report.breakTotalMs)}`);
     lines.push(`Interruptions ${formatElapsedDuration(report.interruptionTotalMs)}`);
+    lines.push(`Idle ${formatElapsedDuration(report.idleTotalMs)}`);
 
     for (const comment of report.interruptionComments)
         lines.push(`Comment: ${comment.comment}`);
@@ -79,10 +80,11 @@ function formatWeeklyReportLines(report) {
 
     lines.push(`Breaks ${formatElapsedDuration(report.breakTotalMs)}`);
     lines.push(`Interruptions ${formatElapsedDuration(report.interruptionTotalMs)}`);
+    lines.push(`Idle ${formatElapsedDuration(report.idleTotalMs)}`);
 
     for (const day of report.days) {
         const taskTotalMs = day.tasks.reduce((totalMs, task) => totalMs + task.totalMs, 0);
-        const dayTotalMs = taskTotalMs + day.breakTotalMs + day.interruptionTotalMs;
+        const dayTotalMs = taskTotalMs + day.breakTotalMs + day.interruptionTotalMs + day.idleTotalMs;
 
         if (dayTotalMs > 0)
             lines.push(`${day.date} total ${formatElapsedDuration(dayTotalMs)}`);

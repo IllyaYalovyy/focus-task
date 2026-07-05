@@ -2,6 +2,7 @@ export const ActivityKind = Object.freeze({
     TASK: 'task',
     BREAK: 'break',
     INTERRUPTION: 'interruption',
+    IDLE: 'idle',
 });
 
 function requireNonEmptyString(value, fieldName) {
@@ -87,6 +88,9 @@ function requireModeledActivity(activity, fieldName) {
 
     if (activity.kind === ActivityKind.INTERRUPTION)
         return createInterruptionActivity(activity);
+
+    if (activity.kind === ActivityKind.IDLE)
+        return createIdleActivity(activity);
 
     throw new Error(`${fieldName} must be a modeled activity`);
 }
@@ -216,6 +220,14 @@ export function createInterruptionActivity({id, name = 'Interruption', comment =
     });
 }
 
+export function createIdleActivity({id, name = 'Idle'}) {
+    return createActivity({
+        id,
+        kind: ActivityKind.IDLE,
+        name,
+    });
+}
+
 export function startTrackedSession({id, activity, startedAt}) {
     if (!activity || !Object.values(ActivityKind).includes(activity.kind))
         throw new Error('session activity must be a modeled activity');
@@ -294,6 +306,7 @@ export function generateDailyReport(state, {date, now = new Date().toISOString()
     const tasksById = new Map();
     let breakTotalMs = 0;
     let interruptionTotalMs = 0;
+    let idleTotalMs = 0;
     const interruptionComments = [];
 
     for (const session of reportSessions) {
@@ -322,6 +335,8 @@ export function generateDailyReport(state, {date, now = new Date().toISOString()
                     comment: session.activity.comment,
                 }));
             }
+        } else if (session.activity.kind === ActivityKind.IDLE) {
+            idleTotalMs += overlapMs;
         }
     }
 
@@ -335,6 +350,7 @@ export function generateDailyReport(state, {date, now = new Date().toISOString()
         tasks: Object.freeze([...tasksById.values()].map(task => Object.freeze(task))),
         breakTotalMs,
         interruptionTotalMs,
+        idleTotalMs,
         interruptionComments: Object.freeze(interruptionComments),
         runningActivity: runningActivity === null ? null : Object.freeze(runningActivity),
     });
@@ -351,6 +367,7 @@ export function generateWeeklyReport(state, {weekStartDate, now = new Date().toI
     const interruptionComments = [];
     let breakTotalMs = 0;
     let interruptionTotalMs = 0;
+    let idleTotalMs = 0;
 
     for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
         const date = formatUtcDate(weekStartMs + dayIndex * 24 * 60 * 60 * 1000);
@@ -358,6 +375,7 @@ export function generateWeeklyReport(state, {weekStartDate, now = new Date().toI
         days.push(dayReport);
         breakTotalMs += dayReport.breakTotalMs;
         interruptionTotalMs += dayReport.interruptionTotalMs;
+        idleTotalMs += dayReport.idleTotalMs;
 
         for (const task of dayReport.tasks) {
             const existingTask = tasksById.get(task.id);
@@ -395,6 +413,7 @@ export function generateWeeklyReport(state, {weekStartDate, now = new Date().toI
         tasks: Object.freeze(tasks.map(task => Object.freeze(task))),
         breakTotalMs,
         interruptionTotalMs,
+        idleTotalMs,
         interruptionComments: Object.freeze(interruptionComments),
         days: Object.freeze(days),
         runningActivity: runningActivity === null ? null : Object.freeze(runningActivity),
@@ -543,6 +562,19 @@ export function startInterruptionSession(
         activeSession: resumesActivity === null
             ? interruptionSession
             : Object.freeze({...interruptionSession, resumesActivity}),
+    });
+}
+
+export function startIdleSession(currentSession, {sessionId, idleId, name = 'Idle', startedAt}) {
+    const idleSession = startTrackedSession({
+        id: sessionId,
+        activity: createIdleActivity({id: idleId, name}),
+        startedAt,
+    });
+
+    return Object.freeze({
+        endedSession: currentSession === null ? null : endTrackedSession(currentSession, startedAt),
+        activeSession: idleSession,
     });
 }
 

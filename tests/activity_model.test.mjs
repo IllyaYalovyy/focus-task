@@ -5,6 +5,7 @@ import {
     ActivityKind,
     addTaskToList,
     createBreakActivity,
+    createIdleActivity,
     createInterruptionActivity,
     createTaskList,
     createTaskActivity,
@@ -20,13 +21,14 @@ import {
     resumePreviousTaskFromBreak,
     serializeTrackerState,
     startBreakSession,
+    startIdleSession,
     startInterruptionSession,
     startTrackedSession,
     switchActiveTask,
     switchToNextTask,
 } from '../extension/activityModel.js';
 
-test('models task, break, and interruption activities with stable identities', () => {
+test('models task, break, interruption, and idle activities with stable identities', () => {
     assert.deepEqual(createTaskActivity({id: 'task-1', name: '  Write tests  '}), {
         id: 'task-1',
         kind: ActivityKind.TASK,
@@ -48,6 +50,12 @@ test('models task, break, and interruption activities with stable identities', (
         kind: ActivityKind.INTERRUPTION,
         name: 'Support request',
         comment: 'Customer escalation',
+    });
+
+    assert.deepEqual(createIdleActivity({id: 'idle-1', name: 'Locked'}), {
+        id: 'idle-1',
+        kind: ActivityKind.IDLE,
+        name: 'Locked',
     });
 });
 
@@ -344,6 +352,37 @@ test('ends an interruption and resumes the previously active task', () => {
     });
 });
 
+test('starts idle by stopping the current activity without automatic resumption', () => {
+    const task = createTaskActivity({id: 'task-1', name: 'Write model'});
+    const currentSession = startTrackedSession({
+        id: 'session-1',
+        activity: task,
+        startedAt: '2026-07-05T16:00:00.000Z',
+    });
+
+    const idleSwitch = startIdleSession(currentSession, {
+        sessionId: 'session-2',
+        idleId: 'idle-lock-1',
+        name: 'Screen locked',
+        startedAt: '2026-07-05T16:25:00.000Z',
+    });
+
+    assert.deepEqual(idleSwitch.endedSession, {
+        id: 'session-1',
+        activity: task,
+        startedAt: '2026-07-05T16:00:00.000Z',
+        endedAt: '2026-07-05T16:25:00.000Z',
+    });
+    assert.deepEqual(idleSwitch.activeSession, {
+        id: 'session-2',
+        activity: {id: 'idle-lock-1', kind: ActivityKind.IDLE, name: 'Screen locked'},
+        startedAt: '2026-07-05T16:25:00.000Z',
+        endedAt: null,
+    });
+    assert.equal(idleSwitch.activeSession.resumesActivity, undefined);
+    assert.equal(currentSession.endedAt, null);
+});
+
 test('starts and ends tracked sessions without mutating the original session', () => {
     const activity = createTaskActivity({id: 'task-1', name: 'Write model'});
     const session = startTrackedSession({
@@ -529,6 +568,7 @@ test('generates a daily report with aggregated tasks, breaks, and interruptions'
         ],
         breakTotalMs: 15 * 60 * 1000,
         interruptionTotalMs: 5 * 60 * 1000,
+        idleTotalMs: 0,
         interruptionComments: [{
             sessionId: 'session-4',
             activityId: 'interrupt-1',
@@ -570,6 +610,7 @@ test('generates a daily report that includes the running activity through now', 
         }],
         breakTotalMs: 0,
         interruptionTotalMs: 0,
+        idleTotalMs: 0,
         interruptionComments: [],
         runningActivity: {
             sessionId: 'session-2',
@@ -579,6 +620,32 @@ test('generates a daily report that includes the running activity through now', 
             startedAt: '2026-07-05T10:30:00.000Z',
         },
     });
+});
+
+test('generates a daily report with idle time separate from work and breaks', () => {
+    const task = createTaskActivity({id: 'task-1', name: 'Write model'});
+    const sessions = [
+        endTrackedSession(startTrackedSession({
+            id: 'session-1',
+            activity: task,
+            startedAt: '2026-07-05T09:00:00.000Z',
+        }), '2026-07-05T09:20:00.000Z'),
+        endTrackedSession(startTrackedSession({
+            id: 'session-2',
+            activity: createIdleActivity({id: 'idle-1', name: 'Screen locked'}),
+            startedAt: '2026-07-05T09:20:00.000Z',
+        }), '2026-07-05T09:50:00.000Z'),
+    ];
+
+    const report = generateDailyReport(
+        createTrackerState({sessions}),
+        {date: '2026-07-05', now: '2026-07-05T12:00:00.000Z'},
+    );
+
+    assert.equal(report.tasks[0].totalMs, 20 * 60 * 1000);
+    assert.equal(report.breakTotalMs, 0);
+    assert.equal(report.interruptionTotalMs, 0);
+    assert.equal(report.idleTotalMs, 30 * 60 * 1000);
 });
 
 test('rejects invalid daily report inputs', () => {
@@ -662,6 +729,7 @@ test('generates a weekly report with task totals and day breakdowns', () => {
     ]);
     assert.equal(report.breakTotalMs, 20 * 60 * 1000);
     assert.equal(report.interruptionTotalMs, 45 * 60 * 1000);
+    assert.equal(report.idleTotalMs, 0);
     assert.deepEqual(report.interruptionComments, [{
         sessionId: 'session-4',
         activityId: 'interrupt-1',

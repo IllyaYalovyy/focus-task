@@ -136,15 +136,16 @@ day and may have an active running activity.
 2. Generate the daily report.
 
 **Outcome:** The report aggregates repeated task sessions by task identity,
-clips sessions to the selected UTC calendar day, shows total break and
-interruption time, includes interruption comments when provided, and identifies
-the running activity when it overlaps the selected day.
+clips sessions to the selected UTC calendar day, shows total break,
+interruption, and idle time, includes interruption comments when provided, and
+identifies the running activity when it overlaps the selected day.
 
 **Interactions:** 2
 
 **Regression coverage:**
 `generates a daily report with aggregated tasks, breaks, and interruptions`,
 `generates a daily report that includes the running activity through now`,
+`generates a daily report with idle time separate from work and breaks`,
 `rejects invalid daily report inputs`
 
 ## UT-007: Generate Weekly Reports
@@ -159,13 +160,36 @@ week and may have an active running activity.
 
 **Outcome:** The report aggregates repeated task sessions by task identity across
 the selected seven-day UTC week, clips sessions to the week and each daily
-breakdown, shows total break and interruption time, includes dated interruption
-comments when provided, sorts weekly task totals by highest time first, includes
-seven daily breakdowns, and identifies the running activity when it overlaps the
-selected week.
+breakdown, shows total break, interruption, and idle time, includes dated
+interruption comments when provided, sorts weekly task totals by highest time
+first, includes seven daily breakdowns, and identifies the running activity when
+it overlaps the selected week.
 
 **Interactions:** 2
 
 **Regression coverage:**
 `generates a weekly report with task totals and day breakdowns`, `rejects
 invalid weekly report inputs`
+
+## UT-008: Track Idle Time From Lock or Suspend
+
+**Precondition:** The extension may have a task, break, interruption, or no
+activity running when GNOME reports a lock, suspend, or idle event.
+
+**Flow:**
+
+1. Receive the lock, suspend, or idle event.
+2. Stop the current activity at the event time when one is running.
+3. Start an idle session at that same time.
+
+**Outcome:** Time after the event is recorded as idle instead of task, break, or
+interruption time. The prior activity is not stored for automatic resumption, so
+the user must explicitly choose what to track after returning. Reports show idle
+time separately from task, break, and interruption totals.
+
+**Interactions:** 0
+
+**Regression coverage:**
+`starts idle by stopping the current activity without automatic resumption`,
+`generates a daily report with idle time separate from work and breaks`,
+`formats daily and weekly report menu sections`
