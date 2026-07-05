@@ -11,6 +11,7 @@ import {
     createTrackerState,
     endTrackedSession,
     generateDailyReport,
+    generateWeeklyReport,
     getTrackedSessionDurationMs,
     removeTaskFromList,
     renameTaskInList,
@@ -594,6 +595,152 @@ test('rejects invalid daily report inputs', () => {
     assert.throws(
         () => generateDailyReport(state, {
             date: '2026-07-05',
+            now: 'not a date',
+        }),
+        /now must be a valid ISO timestamp/,
+    );
+});
+
+test('generates a weekly report with task totals and day breakdowns', () => {
+    const writeTask = createTaskActivity({id: 'task-1', name: 'Write model'});
+    const reviewTask = createTaskActivity({id: 'task-2', name: 'Review tests'});
+    const sessions = [
+        endTrackedSession(startTrackedSession({
+            id: 'session-1',
+            activity: writeTask,
+            startedAt: '2026-07-05T23:30:00.000Z',
+        }), '2026-07-06T00:30:00.000Z'),
+        endTrackedSession(startTrackedSession({
+            id: 'session-2',
+            activity: reviewTask,
+            startedAt: '2026-07-06T10:00:00.000Z',
+        }), '2026-07-06T11:30:00.000Z'),
+        endTrackedSession(startTrackedSession({
+            id: 'session-3',
+            activity: createBreakActivity({id: 'break-1', name: 'Lunch'}),
+            startedAt: '2026-07-07T12:00:00.000Z',
+        }), '2026-07-07T12:20:00.000Z'),
+        endTrackedSession(startTrackedSession({
+            id: 'session-4',
+            activity: createInterruptionActivity({
+                id: 'interrupt-1',
+                name: 'Support request',
+                comment: 'Customer escalation',
+            }),
+            startedAt: '2026-07-08T09:00:00.000Z',
+        }), '2026-07-08T09:45:00.000Z'),
+    ];
+    const activeSession = startTrackedSession({
+        id: 'session-5',
+        activity: writeTask,
+        startedAt: '2026-07-10T15:00:00.000Z',
+    });
+
+    const report = generateWeeklyReport(
+        createTrackerState({sessions, activeSession}),
+        {
+            weekStartDate: '2026-07-06',
+            now: '2026-07-10T16:00:00.000Z',
+        },
+    );
+
+    assert.equal(report.weekStartDate, '2026-07-06');
+    assert.equal(report.weekEndDate, '2026-07-12');
+    assert.deepEqual(report.tasks, [
+        {
+            id: 'task-2',
+            name: 'Review tests',
+            totalMs: 90 * 60 * 1000,
+            isRunning: false,
+        },
+        {
+            id: 'task-1',
+            name: 'Write model',
+            totalMs: 90 * 60 * 1000,
+            isRunning: true,
+        },
+    ]);
+    assert.equal(report.breakTotalMs, 20 * 60 * 1000);
+    assert.equal(report.interruptionTotalMs, 45 * 60 * 1000);
+    assert.deepEqual(report.interruptionComments, [{
+        sessionId: 'session-4',
+        activityId: 'interrupt-1',
+        date: '2026-07-08',
+        comment: 'Customer escalation',
+    }]);
+    assert.equal(report.days.length, 7);
+    assert.deepEqual(report.days.map(day => ({
+        date: day.date,
+        taskTotalMs: day.tasks.reduce((totalMs, task) => totalMs + task.totalMs, 0),
+        breakTotalMs: day.breakTotalMs,
+        interruptionTotalMs: day.interruptionTotalMs,
+    })), [
+        {
+            date: '2026-07-06',
+            taskTotalMs: 120 * 60 * 1000,
+            breakTotalMs: 0,
+            interruptionTotalMs: 0,
+        },
+        {
+            date: '2026-07-07',
+            taskTotalMs: 0,
+            breakTotalMs: 20 * 60 * 1000,
+            interruptionTotalMs: 0,
+        },
+        {
+            date: '2026-07-08',
+            taskTotalMs: 0,
+            breakTotalMs: 0,
+            interruptionTotalMs: 45 * 60 * 1000,
+        },
+        {
+            date: '2026-07-09',
+            taskTotalMs: 0,
+            breakTotalMs: 0,
+            interruptionTotalMs: 0,
+        },
+        {
+            date: '2026-07-10',
+            taskTotalMs: 60 * 60 * 1000,
+            breakTotalMs: 0,
+            interruptionTotalMs: 0,
+        },
+        {
+            date: '2026-07-11',
+            taskTotalMs: 0,
+            breakTotalMs: 0,
+            interruptionTotalMs: 0,
+        },
+        {
+            date: '2026-07-12',
+            taskTotalMs: 0,
+            breakTotalMs: 0,
+            interruptionTotalMs: 0,
+        },
+    ]);
+    assert.deepEqual(report.runningActivity, {
+        sessionId: 'session-5',
+        id: 'task-1',
+        kind: ActivityKind.TASK,
+        name: 'Write model',
+        startedAt: '2026-07-10T15:00:00.000Z',
+    });
+});
+
+test('rejects invalid weekly report inputs', () => {
+    const state = createTrackerState();
+
+    assert.throws(
+        () => generateWeeklyReport(state, {
+            weekStartDate: '2026-7-6',
+            now: '2026-07-10T11:00:00.000Z',
+        }),
+        /report date must be a YYYY-MM-DD date/,
+    );
+
+    assert.throws(
+        () => generateWeeklyReport(state, {
+            weekStartDate: '2026-07-06',
             now: 'not a date',
         }),
         /now must be a valid ISO timestamp/,

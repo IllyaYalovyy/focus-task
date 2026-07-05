@@ -277,6 +277,10 @@ function createRunningActivitySummary(session) {
     };
 }
 
+function formatUtcDate(timestampMs) {
+    return new Date(timestampMs).toISOString().slice(0, 10);
+}
+
 export function generateDailyReport(state, {date, now = new Date().toISOString()} = {}) {
     const reportDate = requireReportDate(date);
     const validNow = requireIsoTimestamp(now, 'now');
@@ -332,6 +336,67 @@ export function generateDailyReport(state, {date, now = new Date().toISOString()
         breakTotalMs,
         interruptionTotalMs,
         interruptionComments: Object.freeze(interruptionComments),
+        runningActivity: runningActivity === null ? null : Object.freeze(runningActivity),
+    });
+}
+
+export function generateWeeklyReport(state, {weekStartDate, now = new Date().toISOString()} = {}) {
+    const reportWeekStartDate = requireReportDate(weekStartDate);
+    const validNow = requireIsoTimestamp(now, 'now');
+    const trackerState = createTrackerState(state);
+    const weekStartMs = Date.parse(`${reportWeekStartDate}T00:00:00.000Z`);
+    const weekEndMs = weekStartMs + 7 * 24 * 60 * 60 * 1000;
+    const days = [];
+    const tasksById = new Map();
+    const interruptionComments = [];
+    let breakTotalMs = 0;
+    let interruptionTotalMs = 0;
+
+    for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
+        const date = formatUtcDate(weekStartMs + dayIndex * 24 * 60 * 60 * 1000);
+        const dayReport = generateDailyReport(trackerState, {date, now: validNow});
+        days.push(dayReport);
+        breakTotalMs += dayReport.breakTotalMs;
+        interruptionTotalMs += dayReport.interruptionTotalMs;
+
+        for (const task of dayReport.tasks) {
+            const existingTask = tasksById.get(task.id);
+            tasksById.set(task.id, {
+                id: task.id,
+                name: task.name,
+                totalMs: (existingTask?.totalMs ?? 0) + task.totalMs,
+                isRunning: (existingTask?.isRunning ?? false) || task.isRunning,
+            });
+        }
+
+        for (const comment of dayReport.interruptionComments) {
+            interruptionComments.push(Object.freeze({
+                ...comment,
+                date,
+            }));
+        }
+    }
+
+    const activeSession = trackerState.activeSession;
+    const runningActivity = activeSession !== null
+        && getSessionOverlapMs(activeSession, weekStartMs, weekEndMs, validNow) > 0
+        ? createRunningActivitySummary(activeSession)
+        : null;
+    const tasks = [...tasksById.values()].sort((left, right) => {
+        if (right.totalMs !== left.totalMs)
+            return right.totalMs - left.totalMs;
+
+        return left.name.localeCompare(right.name);
+    });
+
+    return Object.freeze({
+        weekStartDate: reportWeekStartDate,
+        weekEndDate: formatUtcDate(weekStartMs + 6 * 24 * 60 * 60 * 1000),
+        tasks: Object.freeze(tasks.map(task => Object.freeze(task))),
+        breakTotalMs,
+        interruptionTotalMs,
+        interruptionComments: Object.freeze(interruptionComments),
+        days: Object.freeze(days),
         runningActivity: runningActivity === null ? null : Object.freeze(runningActivity),
     });
 }

@@ -146,3 +146,26 @@ the running activity when it overlaps the selected day.
 `generates a daily report with aggregated tasks, breaks, and interruptions`,
 `generates a daily report that includes the running activity through now`,
 `rejects invalid daily report inputs`
+
+## UT-007: Generate Weekly Reports
+
+**Precondition:** The extension has completed tracked sessions for the selected
+week and may have an active running activity.
+
+**Flow:**
+
+1. Select the UTC week start date to review.
+2. Generate the weekly report.
+
+**Outcome:** The report aggregates repeated task sessions by task identity across
+the selected seven-day UTC week, clips sessions to the week and each daily
+breakdown, shows total break and interruption time, includes dated interruption
+comments when provided, sorts weekly task totals by highest time first, includes
+seven daily breakdowns, and identifies the running activity when it overlaps the
+selected week.
+
+**Interactions:** 2
+
+**Regression coverage:**
+`generates a weekly report with task totals and day breakdowns`, `rejects
+invalid weekly report inputs`
