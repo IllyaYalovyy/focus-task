@@ -7,18 +7,27 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
+import {createTrackerState} from './activityModel.js';
+import {formatTopBarActivity} from './topBarViewModel.js';
+
 const FocusTaskIndicator = GObject.registerClass(
 class FocusTaskIndicator extends PanelMenu.Button {
-    _init() {
+    _init(trackerState = createTrackerState()) {
         super._init(0.0, _('Focus Task'));
 
+        this._trackerState = trackerState;
         this._label = new St.Label({
-            text: _('Focus Task 0:00'),
+            text: '',
             y_align: Clutter.ActorAlign.CENTER,
         });
 
         this.add_child(this._label);
         this.menu.addMenuItem(new PopupMenu.PopupMenuItem(_('No active task')));
+        this._updateLabel();
+    }
+
+    _updateLabel(now = new Date()) {
+        this._label.set_text(formatTopBarActivity(this._trackerState, now));
     }
 });
 
