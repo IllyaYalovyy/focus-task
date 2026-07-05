@@ -53,6 +53,10 @@ function hasTaskName(taskList, taskName, ignoredTaskId = null) {
     return taskList.some(task => task.id !== ignoredTaskId && task.name === taskName);
 }
 
+function findTaskById(taskList, taskId) {
+    return taskList.find(task => task.id === taskId) ?? null;
+}
+
 function createActivity({id, kind, name, comment}) {
     const activity = {
         id: requireNonEmptyString(id, 'activity id'),
@@ -189,4 +193,42 @@ export function getTrackedSessionDurationMs(session, now = null) {
         throw new Error('session duration cannot be negative');
 
     return durationMs;
+}
+
+export function switchActiveTask(taskList, currentSession, {sessionId, taskId, switchedAt}) {
+    const tasks = requireTaskList(taskList);
+    const validTaskId = requireNonEmptyString(taskId, 'task id');
+    const nextTask = findTaskById(tasks, validTaskId);
+
+    if (nextTask === null)
+        throw new Error('task id does not exist');
+
+    const activeSession = startTrackedSession({
+        id: sessionId,
+        activity: nextTask,
+        startedAt: switchedAt,
+    });
+
+    return Object.freeze({
+        endedSession: currentSession === null ? null : endTrackedSession(currentSession, switchedAt),
+        activeSession,
+    });
+}
+
+export function switchToNextTask(taskList, currentSession, {sessionId, switchedAt}) {
+    const tasks = requireTaskList(taskList);
+
+    if (tasks.length === 0)
+        throw new Error('task list must contain at least one task');
+
+    const currentTaskIndex = currentSession === null
+        ? -1
+        : tasks.findIndex(task => task.id === currentSession.activity?.id);
+    const nextTask = tasks[(currentTaskIndex + 1) % tasks.length];
+
+    return switchActiveTask(tasks, currentSession, {
+        sessionId,
+        taskId: nextTask.id,
+        switchedAt,
+    });
 }
