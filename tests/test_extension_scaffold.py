@@ -72,13 +72,14 @@ class ExtensionScaffoldTest(unittest.TestCase):
             self.assertIn(expected_import, source)
 
         expected_labels = [
+            "Next",
             "Add Task...",
             "Switch to Next Task",
             "Start Break",
             "Start Interruption",
             "End Break",
             "End Interruption",
-            "Switch to",
+            "Manage Tasks",
             "Rename",
             "Remove",
         ]
@@ -88,6 +89,15 @@ class ExtensionScaffoldTest(unittest.TestCase):
         self.assertIn("PopupMenu.PopupSubMenuMenuItem", source)
         self.assertIn("PopupMenu.PopupSeparatorMenuItem", source)
         self.assertNotIn("No active task", source)
+
+    def test_extension_exposes_direct_switch_actions(self):
+        source = EXTENSION_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("this._nextButton.connect('clicked'", source)
+        self.assertIn("_updateNextButtonState", source)
+        self.assertIn("_createTaskSwitchItem", source)
+        self.assertIn("this.menu.addMenuItem(this._createTaskSwitchItem(task))", source)
+        self.assertIn("return this._createActionItem(label, () => this._switchToTask(task.id))", source)
 
     def test_extension_file_has_no_repository_specific_paths(self):
         source = EXTENSION_PATH.read_text(encoding="utf-8")

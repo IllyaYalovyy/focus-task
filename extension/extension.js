@@ -39,19 +39,40 @@ class FocusTaskIndicator extends PanelMenu.Button {
 
         this._trackerState = trackerState;
         this._labelRefreshTimerId = null;
+        this._panelBox = new St.BoxLayout({
+            y_align: Clutter.ActorAlign.CENTER,
+        });
         this._label = new St.Label({
             text: '',
             y_align: Clutter.ActorAlign.CENTER,
         });
+        this._nextButton = new St.Button({
+            label: _('Next'),
+            can_focus: true,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
 
-        this.add_child(this._label);
+        this._nextButton.connect('clicked', () => this._runMenuAction(() => this._switchToNextTask()));
+
+        this._panelBox.add_child(this._label);
+        this._panelBox.add_child(this._nextButton);
+        this.add_child(this._panelBox);
         this._rebuildMenu();
         this._updateLabel();
+        this._updateNextButtonState();
         this._startLabelRefreshTimer();
     }
 
     _updateLabel(now = new Date()) {
         this._label.set_text(formatTopBarActivity(this._trackerState, now));
+    }
+
+    _updateNextButtonState() {
+        const hasTasks = this._trackerState.taskList.length > 0;
+
+        this._nextButton.reactive = hasTasks;
+        this._nextButton.can_focus = hasTasks;
+        this._nextButton.opacity = hasTasks ? 255 : 96;
     }
 
     _startLabelRefreshTimer() {
@@ -76,6 +97,7 @@ class FocusTaskIndicator extends PanelMenu.Button {
     _setTrackerState(nextState) {
         this._trackerState = createTrackerState(nextState);
         this._updateLabel();
+        this._updateNextButtonState();
         this._rebuildMenu();
     }
 
@@ -222,6 +244,13 @@ class FocusTaskIndicator extends PanelMenu.Button {
         return item;
     }
 
+    _createTaskSwitchItem(task) {
+        const isActive = this._trackerState.activeSession?.activity?.id === task.id;
+        const label = isActive ? `${task.name} (current)` : task.name;
+
+        return this._createActionItem(label, () => this._switchToTask(task.id));
+    }
+
     _createReportLine(label) {
         const item = new PopupMenu.PopupMenuItem(label);
         item.setSensitive(false);
@@ -253,6 +282,12 @@ class FocusTaskIndicator extends PanelMenu.Button {
         ));
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
+        for (const task of this._trackerState.taskList)
+            this.menu.addMenuItem(this._createTaskSwitchItem(task));
+
+        if (this._trackerState.taskList.length > 0)
+            this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+
         const breakInterruptionMenuState = getBreakInterruptionMenuState(this._trackerState);
         this.menu.addMenuItem(this._createActionItem(
             _('Start Break'),
@@ -281,12 +316,12 @@ class FocusTaskIndicator extends PanelMenu.Button {
         this.menu.addMenuItem(this._createReportMenu(reportMenuState.weekly));
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
+        if (this._trackerState.taskList.length === 0)
+            return;
+
+        const manageTasksMenu = new PopupMenu.PopupSubMenuMenuItem(_('Manage Tasks'));
         for (const task of this._trackerState.taskList) {
             const taskMenu = new PopupMenu.PopupSubMenuMenuItem(task.name);
-            taskMenu.menu.addMenuItem(this._createActionItem(
-                _('Switch to'),
-                () => this._switchToTask(task.id),
-            ));
             taskMenu.menu.addMenuItem(this._createEntryControl({
                 initialText: task.name,
                 hintText: _('Rename'),
@@ -298,8 +333,10 @@ class FocusTaskIndicator extends PanelMenu.Button {
                 () => this._removeTask(task.id),
             ));
 
-            this.menu.addMenuItem(taskMenu);
+            manageTasksMenu.menu.addMenuItem(taskMenu);
         }
+
+        this.menu.addMenuItem(manageTasksMenu);
     }
 
     destroy() {
