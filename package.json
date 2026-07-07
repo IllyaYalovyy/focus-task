@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "mkdir -p dist && cd extension && gnome-extensions pack --force --out-dir ../dist --extra-source activityModel.js --extra-source topBarViewModel.js .",
     "test": "node --test tests/*.test.mjs"
   }
 }

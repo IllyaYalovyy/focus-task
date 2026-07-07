@@ -1,4 +1,5 @@
 import Clutter from 'gi://Clutter';
+import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 
@@ -25,6 +26,8 @@ import {
     getReportMenuState,
 } from './topBarViewModel.js';
 
+const LABEL_REFRESH_INTERVAL_SECONDS = 60;
+
 function createId(prefix) {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -35,6 +38,7 @@ class FocusTaskIndicator extends PanelMenu.Button {
         super._init(0.0, _('Focus Task'));
 
         this._trackerState = trackerState;
+        this._labelRefreshTimerId = null;
         this._label = new St.Label({
             text: '',
             y_align: Clutter.ActorAlign.CENTER,
@@ -43,10 +47,30 @@ class FocusTaskIndicator extends PanelMenu.Button {
         this.add_child(this._label);
         this._rebuildMenu();
         this._updateLabel();
+        this._startLabelRefreshTimer();
     }
 
     _updateLabel(now = new Date()) {
         this._label.set_text(formatTopBarActivity(this._trackerState, now));
+    }
+
+    _startLabelRefreshTimer() {
+        this._labelRefreshTimerId = GLib.timeout_add_seconds(
+            GLib.PRIORITY_DEFAULT,
+            LABEL_REFRESH_INTERVAL_SECONDS,
+            () => {
+                this._updateLabel();
+                return GLib.SOURCE_CONTINUE;
+            },
+        );
+    }
+
+    _stopLabelRefreshTimer() {
+        if (this._labelRefreshTimerId === null)
+            return;
+
+        GLib.source_remove(this._labelRefreshTimerId);
+        this._labelRefreshTimerId = null;
     }
 
     _setTrackerState(nextState) {
@@ -276,6 +300,11 @@ class FocusTaskIndicator extends PanelMenu.Button {
 
             this.menu.addMenuItem(taskMenu);
         }
+    }
+
+    destroy() {
+        this._stopLabelRefreshTimer();
+        super.destroy();
     }
 });
 

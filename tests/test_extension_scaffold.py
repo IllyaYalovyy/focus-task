@@ -8,6 +8,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 EXTENSION_DIR = REPO_ROOT / "extension"
 METADATA_PATH = EXTENSION_DIR / "metadata.json"
 EXTENSION_PATH = EXTENSION_DIR / "extension.js"
+PACKAGE_JSON_PATH = REPO_ROOT / "package.json"
 
 
 class ExtensionScaffoldTest(unittest.TestCase):
@@ -42,6 +43,17 @@ class ExtensionScaffoldTest(unittest.TestCase):
         self.assertIn("formatTopBarActivity", source)
         self.assertIn("formatTopBarActivity(this._trackerState, now)", source)
         self.assertNotIn("Focus Task 0:00", source)
+
+    def test_extension_refreshes_top_bar_label_periodically(self):
+        source = EXTENSION_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("import GLib from 'gi://GLib'", source)
+        self.assertIn("LABEL_REFRESH_INTERVAL_SECONDS = 60", source)
+        self.assertIn("GLib.timeout_add_seconds", source)
+        self.assertIn("this._updateLabel();", source)
+        self.assertIn("return GLib.SOURCE_CONTINUE", source)
+        self.assertIn("GLib.source_remove(this._labelRefreshTimerId)", source)
+        self.assertRegex(source, r"destroy\s*\(\)\s*{")
 
     def test_extension_menu_exposes_task_controls(self):
         source = EXTENSION_PATH.read_text(encoding="utf-8")
@@ -90,6 +102,14 @@ class ExtensionScaffoldTest(unittest.TestCase):
         for pattern in forbidden_patterns:
             self.assertIsNone(pattern.search(source))
             self.assertIsNone(pattern.search(metadata))
+
+    def test_build_command_packages_local_extension_modules(self):
+        package_json = json.loads(PACKAGE_JSON_PATH.read_text(encoding="utf-8"))
+        build_command = package_json["scripts"]["build"]
+
+        self.assertIn("cd extension", build_command)
+        self.assertIn("--extra-source activityModel.js", build_command)
+        self.assertIn("--extra-source topBarViewModel.js", build_command)
 
 
 if __name__ == "__main__":
