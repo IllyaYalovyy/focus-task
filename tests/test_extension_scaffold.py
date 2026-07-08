@@ -121,6 +121,13 @@ class ExtensionScaffoldTest(unittest.TestCase):
         self.assertIn("--extra-source activityModel.js", build_command)
         self.assertIn("--extra-source topBarViewModel.js", build_command)
 
+    def test_local_install_rebuilds_package_before_installing(self):
+        package_json = json.loads(PACKAGE_JSON_PATH.read_text(encoding="utf-8"))
+        install_command = package_json["scripts"]["install:local"]
+
+        self.assertIn("npm run build", install_command)
+        self.assertIn("gnome-extensions install --force", install_command)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -103,6 +103,16 @@ dist/focus-task@yalovyy.com.shell-extension.zip
 Install the packaged extension for the current user:
 
 ```bash
+npm run install:local
+```
+
+That command rebuilds the zip first, then installs it. This matters because
+installing a stale bundle can leave GNOME Shell with only `extension.js` and
+`metadata.json`, which causes imports such as `activityModel.js` to fail.
+
+If you already ran `npm run build`, the equivalent manual install command is:
+
+```bash
 gnome-extensions install --force dist/focus-task@yalovyy.com.shell-extension.zip
 ```
 
