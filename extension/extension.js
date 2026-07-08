@@ -13,8 +13,10 @@ import {
     createTrackerState,
     removeTaskFromList,
     renameTaskInList,
+    restoreTrackerState,
     resumePreviousTaskFromBreak,
     resumePreviousTaskFromInterruption,
+    serializeTrackerState,
     startBreakSession,
     startInterruptionSession,
     switchActiveTask,
@@ -27,6 +29,46 @@ import {
 } from './topBarViewModel.js';
 
 const LABEL_REFRESH_INTERVAL_SECONDS = 60;
+const STATE_DIRECTORY_NAME = 'focus-task';
+const STATE_FILE_NAME = 'state.json';
+
+function getStateFilePath() {
+    return GLib.build_filenamev([
+        GLib.get_user_data_dir(),
+        STATE_DIRECTORY_NAME,
+        STATE_FILE_NAME,
+    ]);
+}
+
+function loadPersistedTrackerState() {
+    const stateFilePath = getStateFilePath();
+
+    if (!GLib.file_test(stateFilePath, GLib.FileTest.EXISTS))
+        return createTrackerState();
+
+    try {
+        const [, contents] = GLib.file_get_contents(stateFilePath);
+        const text = new TextDecoder().decode(contents);
+
+        return restoreTrackerState(JSON.parse(text));
+    } catch (error) {
+        logError(error, 'Focus Task failed to load persisted state');
+        return createTrackerState();
+    }
+}
+
+function savePersistedTrackerState(trackerState) {
+    const stateFilePath = getStateFilePath();
+    const stateDirectoryPath = GLib.path_get_dirname(stateFilePath);
+    const serializedState = JSON.stringify(serializeTrackerState(trackerState), null, 2);
+
+    try {
+        GLib.mkdir_with_parents(stateDirectoryPath, 0o700);
+        GLib.file_set_contents(stateFilePath, serializedState);
+    } catch (error) {
+        logError(error, 'Focus Task failed to save persisted state');
+    }
+}
 
 function createId(prefix) {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -39,40 +81,19 @@ class FocusTaskIndicator extends PanelMenu.Button {
 
         this._trackerState = trackerState;
         this._labelRefreshTimerId = null;
-        this._panelBox = new St.BoxLayout({
-            y_align: Clutter.ActorAlign.CENTER,
-        });
         this._label = new St.Label({
             text: '',
             y_align: Clutter.ActorAlign.CENTER,
         });
-        this._nextButton = new St.Button({
-            label: _('Next'),
-            can_focus: true,
-            y_align: Clutter.ActorAlign.CENTER,
-        });
 
-        this._nextButton.connect('clicked', () => this._runMenuAction(() => this._switchToNextTask()));
-
-        this._panelBox.add_child(this._label);
-        this._panelBox.add_child(this._nextButton);
-        this.add_child(this._panelBox);
+        this.add_child(this._label);
         this._rebuildMenu();
         this._updateLabel();
-        this._updateNextButtonState();
         this._startLabelRefreshTimer();
     }
 
     _updateLabel(now = new Date()) {
         this._label.set_text(formatTopBarActivity(this._trackerState, now));
-    }
-
-    _updateNextButtonState() {
-        const hasTasks = this._trackerState.taskList.length > 0;
-
-        this._nextButton.reactive = hasTasks;
-        this._nextButton.can_focus = hasTasks;
-        this._nextButton.opacity = hasTasks ? 255 : 96;
     }
 
     _startLabelRefreshTimer() {
@@ -96,8 +117,8 @@ class FocusTaskIndicator extends PanelMenu.Button {
 
     _setTrackerState(nextState) {
         this._trackerState = createTrackerState(nextState);
+        savePersistedTrackerState(this._trackerState);
         this._updateLabel();
-        this._updateNextButtonState();
         this._rebuildMenu();
     }
 
@@ -340,6 +361,7 @@ class FocusTaskIndicator extends PanelMenu.Button {
     }
 
     destroy() {
+        savePersistedTrackerState(this._trackerState);
         this._stopLabelRefreshTimer();
         super.destroy();
     }
@@ -347,7 +369,7 @@ class FocusTaskIndicator extends PanelMenu.Button {
 
 export default class FocusTaskExtension extends Extension {
     enable() {
-        this._indicator = new FocusTaskIndicator();
+        this._indicator = new FocusTaskIndicator(loadPersistedTrackerState());
         Main.panel.addToStatusArea(this.uuid, this._indicator);
     }
 

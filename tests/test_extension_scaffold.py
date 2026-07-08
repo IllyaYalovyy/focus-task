@@ -72,7 +72,6 @@ class ExtensionScaffoldTest(unittest.TestCase):
             self.assertIn(expected_import, source)
 
         expected_labels = [
-            "Next",
             "Add Task...",
             "Switch to Next Task",
             "Start Break",
@@ -89,15 +88,25 @@ class ExtensionScaffoldTest(unittest.TestCase):
         self.assertIn("PopupMenu.PopupSubMenuMenuItem", source)
         self.assertIn("PopupMenu.PopupSeparatorMenuItem", source)
         self.assertNotIn("No active task", source)
+        self.assertNotIn("label: _('Next')", source)
 
     def test_extension_exposes_direct_switch_actions(self):
         source = EXTENSION_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("this._nextButton.connect('clicked'", source)
-        self.assertIn("_updateNextButtonState", source)
         self.assertIn("_createTaskSwitchItem", source)
         self.assertIn("this.menu.addMenuItem(this._createTaskSwitchItem(task))", source)
         self.assertIn("return this._createActionItem(label, () => this._switchToTask(task.id))", source)
+
+    def test_extension_persists_tracker_state(self):
+        source = EXTENSION_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("serializeTrackerState", source)
+        self.assertIn("restoreTrackerState", source)
+        self.assertIn("GLib.get_user_data_dir()", source)
+        self.assertIn("STATE_FILE_NAME = 'state.json'", source)
+        self.assertIn("loadPersistedTrackerState()", source)
+        self.assertIn("savePersistedTrackerState(this._trackerState)", source)
+        self.assertIn("new FocusTaskIndicator(loadPersistedTrackerState())", source)
 
     def test_extension_file_has_no_repository_specific_paths(self):
         source = EXTENSION_PATH.read_text(encoding="utf-8")

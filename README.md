@@ -187,8 +187,9 @@ day-by-day breakdown for days that have tracked time.
 
 ## Current Runtime Notes
 
-- The current implementation keeps tracker state in memory. Restarting GNOME
-  Shell or logging out clears the current task list and session history.
+- Tracker state is persisted under the current user's GNOME data directory, in
+  `focus-task/state.json`. Task lists, completed sessions, and the active
+  session are restored after GNOME Shell restarts and login sessions.
 - Report dates and times are calculated in UTC in the current implementation.
 - Break and interruption comments are supported by the domain model and report
   formatting, but the current top-bar menu starts interruptions without a
