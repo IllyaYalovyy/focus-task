@@ -19,7 +19,6 @@ The extension UUID is `focus-task@yalovyy.com`.
 
 ```text
 .
-├── AGENTS.md                    # Instructions for AI coding agents
 ├── CONTRIBUTING.md              # Contributor rules and quality bar
 ├── designs/
 │   ├── RFC-000-template.md      # Design proposal template
