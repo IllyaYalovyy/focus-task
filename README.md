@@ -168,7 +168,8 @@ running. Open the top-bar menu to manage work:
 5. Use `End Break` to resume the interrupted task.
 6. Use `Start Interruption` while a task is active to track unplanned work.
 7. Use `End Interruption` to resume the interrupted task.
-8. Use each task submenu to rename or remove that task from the current list.
+8. Open `Manage Tasks` to rename a task, or choose `Done` to drop it from the
+   current task list. Time already tracked against the task stays in reports.
 9. Open `Daily Report` or `Weekly Report` in the menu to review tracked time.
 
 The top-bar label shows the current activity name and elapsed time, for example:

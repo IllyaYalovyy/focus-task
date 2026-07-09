@@ -80,10 +80,12 @@ class ExtensionScaffoldTest(unittest.TestCase):
             "End Interruption",
             "Manage Tasks",
             "Rename",
-            "Remove",
+            "Done",
         ]
         for label in expected_labels:
             self.assertIn(f"_('{label}')", source)
+
+        self.assertNotIn("_('Remove')", source)
 
         self.assertIn("PopupMenu.PopupSubMenuMenuItem", source)
         self.assertIn("PopupMenu.PopupSeparatorMenuItem", source)

@@ -9,8 +9,10 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 import {
+    ActivityKind,
     addTaskToList,
     createTrackerState,
+    endTrackedSession,
     removeTaskFromList,
     renameTaskInList,
     restoreTrackerState,
@@ -101,7 +103,12 @@ class FocusTaskIndicator extends PanelMenu.Button {
             GLib.PRIORITY_DEFAULT,
             LABEL_REFRESH_INTERVAL_SECONDS,
             () => {
-                this._updateLabel();
+                try {
+                    this._updateLabel();
+                } catch (error) {
+                    logError(error, 'Focus Task failed to refresh the top bar label');
+                }
+
                 return GLib.SOURCE_CONTINUE;
             },
         );
@@ -162,22 +169,54 @@ class FocusTaskIndicator extends PanelMenu.Button {
         if (taskName.trim() === '')
             return;
 
+        const taskList = renameTaskInList(this._trackerState.taskList, taskId, taskName);
+        const renamedTask = taskList.find(task => task.id === taskId);
+
         this._setTrackerState({
-            taskList: renameTaskInList(this._trackerState.taskList, taskId, taskName),
+            taskList,
             sessions: this._trackerState.sessions,
-            activeSession: this._trackerState.activeSession,
+            activeSession: this._renameActiveSessionTask(taskId, renamedTask),
         });
     }
 
+    _renameActiveSessionTask(taskId, renamedTask) {
+        const activeSession = this._trackerState.activeSession;
+        if (activeSession === null)
+            return null;
+
+        // The active task itself was renamed: refresh the running session so the
+        // top bar label and reports reflect the new name without a task switch.
+        if (activeSession.activity.kind === ActivityKind.TASK && activeSession.activity.id === taskId)
+            return {...activeSession, activity: renamedTask};
+
+        // A break or interruption resumes this task: keep the resume target's name
+        // in sync so persisted state stays coherent.
+        if (activeSession.resumesActivity?.id === taskId)
+            return {...activeSession, resumesActivity: renamedTask};
+
+        return activeSession;
+    }
+
     _removeTask(taskId) {
-        const activeSession = this._trackerState.activeSession?.activity?.id === taskId
-            ? null
-            : this._trackerState.activeSession;
+        const activeSession = this._trackerState.activeSession;
+        let nextActiveSession = activeSession;
+        let sessions = this._trackerState.sessions;
+
+        if (activeSession?.activity?.id === taskId) {
+            // The removed task is running: stop tracking it.
+            nextActiveSession = null;
+        } else if (activeSession?.resumesActivity?.id === taskId) {
+            // A break or interruption is paused on the removed task. Ending it
+            // later would fail because the task no longer exists, so end it now
+            // and record its time instead of leaving the session stranded.
+            sessions = [...sessions, endTrackedSession(activeSession, new Date().toISOString())];
+            nextActiveSession = null;
+        }
 
         this._setTrackerState({
             taskList: removeTaskFromList(this._trackerState.taskList, taskId),
-            sessions: this._trackerState.sessions,
-            activeSession,
+            sessions,
+            activeSession: nextActiveSession,
         });
     }
 
@@ -234,10 +273,9 @@ class FocusTaskIndicator extends PanelMenu.Button {
         ));
     }
 
-    _createEntryControl({initialText = '', hintText, buttonText, onSubmit}) {
+    _createEntryControl({hintText, buttonText, onSubmit}) {
         const item = new PopupMenu.PopupBaseMenuItem({activate: false});
         const entry = new St.Entry({
-            text: initialText,
             hint_text: hintText,
             can_focus: true,
             x_expand: true,
@@ -253,6 +291,39 @@ class FocusTaskIndicator extends PanelMenu.Button {
         button.connect('clicked', submit);
         item.add_child(entry);
         item.add_child(button);
+
+        return item;
+    }
+
+    // GNOME Shell tracks a single open submenu per top-level menu, so a submenu
+    // nested inside another submenu closes its own parent when it opens. Each
+    // task therefore gets one flat row instead of its own nested submenu.
+    _createTaskEditItem(task) {
+        const item = new PopupMenu.PopupBaseMenuItem({activate: false});
+        const entry = new St.Entry({
+            text: task.name,
+            can_focus: true,
+            x_expand: true,
+        });
+        const renameButton = new St.Button({
+            label: _('Rename'),
+            can_focus: true,
+            style_class: 'button',
+        });
+        const doneButton = new St.Button({
+            label: _('Done'),
+            can_focus: true,
+            style_class: 'button',
+        });
+        const rename = () => this._runMenuAction(() => this._renameTaskFromEntry(task.id, entry));
+
+        entry.clutter_text.connect('activate', rename);
+        renameButton.connect('clicked', rename);
+        doneButton.connect('clicked', () => this._runMenuAction(() => this._removeTask(task.id)));
+
+        item.add_child(entry);
+        item.add_child(renameButton);
+        item.add_child(doneButton);
 
         return item;
     }
@@ -341,21 +412,8 @@ class FocusTaskIndicator extends PanelMenu.Button {
             return;
 
         const manageTasksMenu = new PopupMenu.PopupSubMenuMenuItem(_('Manage Tasks'));
-        for (const task of this._trackerState.taskList) {
-            const taskMenu = new PopupMenu.PopupSubMenuMenuItem(task.name);
-            taskMenu.menu.addMenuItem(this._createEntryControl({
-                initialText: task.name,
-                hintText: _('Rename'),
-                buttonText: _('Rename'),
-                onSubmit: entry => this._renameTaskFromEntry(task.id, entry),
-            }));
-            taskMenu.menu.addMenuItem(this._createActionItem(
-                _('Remove'),
-                () => this._removeTask(task.id),
-            ));
-
-            manageTasksMenu.menu.addMenuItem(taskMenu);
-        }
+        for (const task of this._trackerState.taskList)
+            manageTasksMenu.menu.addMenuItem(this._createTaskEditItem(task));
 
         this.menu.addMenuItem(manageTasksMenu);
     }
