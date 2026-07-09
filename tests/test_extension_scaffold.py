@@ -1,3 +1,4 @@
+import getpass
 import json
 import re
 import unittest
@@ -9,6 +10,28 @@ EXTENSION_DIR = REPO_ROOT / "extension"
 METADATA_PATH = EXTENSION_DIR / "metadata.json"
 EXTENSION_PATH = EXTENSION_DIR / "extension.js"
 PACKAGE_JSON_PATH = REPO_ROOT / "package.json"
+
+
+def forbidden_patterns():
+    """Patterns that would leak the current machine's user or checkout path.
+
+    These are derived from the environment rather than written literally so the
+    repository never has to contain a real username or home directory.
+    """
+    literals = ["/home/", "/Users/", str(Path.home()), str(REPO_ROOT)]
+    patterns = [re.compile(re.escape(literal)) for literal in literals]
+
+    try:
+        user = getpass.getuser()
+    except Exception:  # No password database entry, e.g. some CI containers.
+        user = ""
+
+    # Match the username only as a whole word, and only when it is long enough
+    # that it will not collide with ordinary identifiers in the source.
+    if len(user) >= 3:
+        patterns.append(re.compile(rf"\b{re.escape(user)}\b"))
+
+    return patterns
 
 
 class ExtensionScaffoldTest(unittest.TestCase):
@@ -114,13 +137,7 @@ class ExtensionScaffoldTest(unittest.TestCase):
         source = EXTENSION_PATH.read_text(encoding="utf-8")
         metadata = METADATA_PATH.read_text(encoding="utf-8")
 
-        forbidden_patterns = [
-            re.compile(r"/home/"),
-            re.compile(r"Projects/focus-task"),
-            re.compile(r"etf"),
-        ]
-
-        for pattern in forbidden_patterns:
+        for pattern in forbidden_patterns():
             self.assertIsNone(pattern.search(source))
             self.assertIsNone(pattern.search(metadata))
 
